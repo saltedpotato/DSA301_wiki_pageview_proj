@@ -1,0 +1,93 @@
+---
+title: "DSA301 Project"
+author: "Sean Chang"
+output: html_document
+---
+
+```{r cars}
+# install.packages("pageviews")
+# install.packages("jsonlite")
+# install.packages("lubridate")
+library(jsonlite)
+library(pageviews)
+library(lubridate)
+library(dplyr)
+library(forecast)
+library(urca)
+library(TSstudio)
+rm(list = ls())
+```
+
+Getting the daily data
+```{r pressure, echo=FALSE}
+start = as.POSIXct("2015/07/01") 
+cutoff = as.POSIXct("2022/02/01") - 60*60
+
+test = project_pageviews(project = "en.wikipedia", platform = "all", user_type = "all", granularity = "daily", start = "2015070100", end = "2022013123", reformat = TRUE)
+```
+
+Getting the hourly data
+```{r}
+hourly_df = project_pageviews(project = "en.wikipedia", platform = "all", user_type = "all", granularity = "hourly", start = pageview_timestamps(start), end = pageview_timestamps(cutoff), reformat = TRUE)
+start = start + 5000*60*60
+
+while (start < cutoff) {
+  print(start)
+  temp = project_pageviews(project = "en.wikipedia", platform = "all", user_type = "all", granularity = "hourly", start = pageview_timestamps(start), end = cutoff, reformat = TRUE)
+  hourly_df = rbind(hourly_df, temp)
+  start = start + 5000*60*60
+}
+```
+
+
+Approach 2 to get data
+```{r}
+project = "en.wikipedia.org"
+access = "all-access"
+agent = "all-agents"
+granularity = "daily"
+start = "2015010100"
+end = "2022013123"
+url_daily = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, granularity, start, end)
+url_hourly = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, "hourly", start, end)
+daily_data = fromJSON(txt=url_daily)$items
+hourly_data = fromJSON(txt= url_hourly)$items
+
+
+```
+
+
+We tried to the data to start from 2018 to reduce clutter and see if can see anything
+```{r}
+msts_wiki_daily <- daily_data$views %>% 
+  diff(lag = 7)%>%
+  msts(seasonal.periods = c(7, 365.25), 
+       start = decimal_date(as.Date("2015-07-01"))) 
+
+autoplot(msts_wiki_daily)
+
+ndiffs(msts_wiki_daily)
+
+msts_wiki_daily %>% 
+  ur.kpss()%>%
+  summary()
+
+ggtsdisplay(msts_wiki_daily)
+acf(msts_wiki_daily)
+
+msts_wiki_daily %>%
+  mstl()%>%
+  autoplot()
+
+wiki_daily_single_yearly <- msts(ts(msts_wiki_daily), seasonal.periods = 365.25)
+wiki_daily_single_weekly <- msts(ts(msts_wiki_daily), seasonal.periods = 7)
+
+wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = 482)
+wiki_daily_single_yearly_split <- ts_split(wiki_daily_single_yearly, sample.out = 482)
+wiki_daily_single_weekly_split <- ts_split(wiki_daily_single_weekly, sample.out = 482)
+accuracy(stlf(wiki_daily_split$train), wiki_daily_split$test)
+accuracy(stlf(wiki_daily_single_yearly_split$train), wiki_daily_single_yearly_split$test)
+accuracy(stlf(wiki_daily_single_weekly_split$train), wiki_daily_single_weekly_split$test)
+
+checkresiduals(stlf(wiki_daily_single_weekly, method = "arima"))
+```

@@ -42,45 +42,51 @@ Converting Raw Data to Time Series
 msts_wiki_daily <- daily_data$views %>% 
   msts(seasonal.periods = c(7, 365), 
        start = decimal_date(as.Date("2015-07-01")))
+
+autoplot(msts_wiki_daily)
+```
+
+Splitting Test & Train Data
+```{r}
+wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = 482)
 ```
 
 Visualising & Decomposing Time Series
 ```{r}
-autoplot(msts_wiki_daily)
-wiki_daily_decomp <- mstl(msts_wiki_daily)
-autoplot(wiki_daily_decomp)
+wiki_daily_decomp_train <- mstl(wiki_daily_split$train)
+autoplot(wiki_daily_decomp_train)
 ```
 
 Transforming Seasonal Adjusted Component
 ```{r}
-seasadj_wiki <- seasadj(wiki_daily_decomp)
+seasadj_wiki <- seasadj(wiki_daily_decomp_train)
 
-#Test stat = 0.0094
+#Test stat = 0.011
 seasadj_wiki %>% 
   diff(lag =1)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.0149 
+#Test stat = 0.0142 
 seasadj_wiki %>% 
   diff(lag =7)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.0055
+#Test stat = 0.003
 seasadj_wiki %>% 
   diff(lag =7)%>% 
   diff(lag = 1)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 1.2046
+#Test stat = 2.2636
 seasadj_wiki %>% 
-  diff(lag = 1)%>%
+  diff(lag = 365)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.0117
+#Test stat = 0.0143
 seasadj_wiki %>% 
   diff(lag =365)%>% 
   diff(lag = 1)%>%
@@ -91,10 +97,7 @@ trans_seasadj_wiki <- seasadj_wiki %>% diff(lag = 1)
 autoplot(trans_seasadj_wiki)
 ```
 
-Splitting Test & Train Data
-```{r}
-wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = 482)
-```
+
 
 
 Fitting Models on Transformed Data
@@ -111,24 +114,11 @@ Acf(trans_seasadj_wiki)
 #Testing out Seasonal ARIMA with stlm. NEED HELP WITH READING ACF & PACF!!! 
 #GRILL PROF ON THURSDAY
 
-m0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)
-m0
+auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
 
-m1 <- Arima(seasadj_wiki,order=c(4,1,3), 
-         seasonal = list(order = c(1,0,2), period = 7))
-m1
+#Ask prof why does this not work. When I tried it on the seasonal adjusted comp. of full data by accident, this does not throw the Error in optim(init[mask], armafn, method = optim.method, hessian = TRUE, : non-finite finite-difference value [7]. Even when using stlm on training data there is no error. Why is it that when i use Arima on training data, in the below comment it doesn't work?
 
-m2 <- Arima(seasadj_wiki,order=c(4,1,2), 
-         seasonal = list(order = c(1,0,2), period = 7))
-m2
-
-m3 <- Arima(seasadj_wiki,order=c(4,1,1), 
-         seasonal = list(order = c(1,1,2), period = 7))
-m3
-
-m4 <- Arima(seasadj_wiki,order=c(4,1,1), 
-         seasonal = list(order = c(2,1,2), period = 7))
-m4
+# m1 <-  Arima(seasadj_wiki, order=c(4,1,1), seasonal = list(order = c(2,0,2), period = 7))
 
 f0 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
          seasonal = list(order = c(2,0,2), period = 7), robust = T)
@@ -145,6 +135,10 @@ f3 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1),
 f4 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
          seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
+f5 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,1), 
+         seasonal = list(order = c(2,0,1), period = 7), robust = T)
+
+
 checkresiduals(forecast(f0))
 checkresiduals(forecast(f1))
 checkresiduals(forecast(f2))
@@ -155,7 +149,6 @@ checkresiduals(forecast(f4))
 accuracy(forecast(f1), wiki_daily_split$test)
 
 autoplot(msts_wiki_daily)+autolayer(forecast(f1), PI = F, alpha = 0.7, col = "red")
-
 ```
 
 

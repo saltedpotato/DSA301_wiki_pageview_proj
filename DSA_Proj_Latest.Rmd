@@ -3,6 +3,9 @@ title: "DSA301 Project"
 author: "Everyone"
 output: html_document
 ---
+Questions:
+1. Decompose first or transform first (benchmark models)
+2. Use checkresiduals or AICc to compare models?
 
 ```{r cars}
 # install.packages("pageviews")
@@ -72,7 +75,7 @@ seasadj_wiki %>%
 
 #Test stat = 1.2046
 seasadj_wiki %>% 
-  diff(lag =365)%>%
+  diff(lag = 1)%>%
   ur.kpss()%>%
   summary()
 
@@ -107,23 +110,24 @@ Acf(trans_seasadj_wiki)
 #Testing out Seasonal ARIMA with stlm. NEED HELP WITH READING ACF & PACF!!! 
 #GRILL PROF ON THURSDAY
 
-auto.arima(ts(msts_wiki_daily, frequency = 7))
+m0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)
+m0
 
-m1 <- Arima(msts_wiki_daily,order=c(2,0,3), 
-         seasonal = list(order = c(1,1,2), period = 7))
+m1 <- Arima(seasadj_wiki,order=c(4,1,3), 
+         seasonal = list(order = c(1,0,2), period = 7))
 m1
 
 
-m2 <- Arima(msts_wiki_daily,order=c(2,0,3), 
-         seasonal = list(order = c(0,1,2), period = 7))
+m2 <- Arima(seasadj_wiki,order=c(4,1,2), 
+         seasonal = list(order = c(1,0,2), period = 7))
 m2
 
 
-f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,0,3), 
-         seasonal = list(order = c(1,1,2), period = 7), robust = T)
+f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,3), 
+         seasonal = list(order = c(1,0,2), period = 7), robust = T)
 
-f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,0,3), 
-         seasonal = list(order = c(0,1,2), period = 7), robust = T)
+f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,2), 
+         seasonal = list(order = c(1,0,2), period = 7), robust = T)
 
 checkresiduals(forecast(f1))
 checkresiduals(forecast(f2))
@@ -132,7 +136,7 @@ accuracy(forecast(f1), wiki_daily_split$test)
 accuracy(forecast(f2), wiki_daily_split$test)
 
 
-autoplot(msts_wiki_daily)+autolayer(forecast(f2), PI = F)
+autoplot(msts_wiki_daily)+autolayer(forecast(f1), PI = F)
 
 ```
 

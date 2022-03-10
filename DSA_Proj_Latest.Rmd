@@ -103,7 +103,8 @@ autoplot(trans_seasadj_wiki)
 Fitting Models on Transformed Data
 ```{r}
 #Benchmark Models (Need to clarify with Prof on how to transform back after we only apply differencing to seasonal adjusted component. Refer to Lecture 6 hmwk 2 code (he applied differencing to time series before decomposition))
-
+b1 <- stlf(wiki_daily_split$train, method = "naive", robust = T)
+b2 <- stlf(wiki_daily_split$train, method = "rwdrift", robust = T)
 
 #ARIMA Models
 ggtsdisplay(trans_seasadj_wiki)
@@ -112,7 +113,7 @@ Acf(trans_seasadj_wiki)
 
 
 #Testing out Seasonal ARIMA with stlm. NEED HELP WITH READING ACF & PACF!!! 
-#GRILL PROF ON THURSDAY
+#ASK PROF ON THURSDAY
 
 auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
 
@@ -144,6 +145,8 @@ checkresiduals(forecast(f1))
 checkresiduals(forecast(f2))
 checkresiduals(forecast(f3))
 checkresiduals(forecast(f4))
+checkresiduals(b1)
+checkresiduals(b2)
 
 #Only f1 passed the Ljung-Box Test for the train set
 accuracy(forecast(f0), wiki_daily_split$test)

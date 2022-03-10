@@ -93,7 +93,7 @@ seasadj_wiki %>%
   ur.kpss()%>%
   summary()
 
-trans_seasadj_wiki <- seasadj_wiki %>% diff(lag = 1)
+trans_seasadj_wiki <- seasadj_wiki %>% diff(lag = 7)%>%diff(lag = 1)
 autoplot(trans_seasadj_wiki)
 ```
 
@@ -113,7 +113,7 @@ Acf(trans_seasadj_wiki)
 
 
 #Testing out Seasonal ARIMA with stlm. NEED HELP WITH READING ACF & PACF!!! 
-#ASK PROF ON THURSDAY
+#ASK PROF ON THURSDAY. Update: Prof say can just mention that the graphs got show  some MA or AR orders and that supports our models (e.g. we got MA and AR components)
 
 auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
 

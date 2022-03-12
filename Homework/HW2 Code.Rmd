@@ -55,6 +55,13 @@ checkresiduals(m7)
 #Residuals of m6 resemble white noise. It also passes the Ljung-Box test with p-value of 0.08318.
 
 #(f)
+latest_data <- read.csv("HW2 Q1 Cleaned Data.csv")
+latest_data_ts <- ts(latest_data["Amount"], start = c(2013,7), deltat = 1/12)
+accuracy(forecast(m6,h = 15*12), latest_data_ts)
+accuracy(forecast(m5,h = 15*12), latest_data_ts)
+accuracy(forecast(m1,h = 15*12), latest_data_ts)
+
+autoplot(forecast(m1,h = 15*12), PI = F)
 
 ```
 

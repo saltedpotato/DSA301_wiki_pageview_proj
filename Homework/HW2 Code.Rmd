@@ -4,6 +4,57 @@ title: "R Notebook"
 ---
 Q1
 ```{r}
+library(fpp2)
+library(forecast)
+library(urca)
+#(a)
+autoplot(ma(usmelec,12,centre = TRUE))
+
+#(b)
+boxcox_usmelec <- BoxCox(usmelec,BoxCox.lambda(usmelec))
+autoplot(boxcox_usmelec)
+
+#(c)
+usmelec%>%
+  ur.kpss()%>%
+  summary()
+
+nsdiffs(boxcox_usmelec) #1
+ndiffs(diff(boxcox_usmelec,12)) #1
+
+#(d)
+ggtsdisplay(boxcox_usmelec)
+ggtsdisplay(diff(diff(boxcox_usmelec,12)))
+
+m1 <- auto.arima(usmelec, lambda = "auto", biasadj = T) #(1,1,3)(2,1,1)[12]
+m2 <- Arima(usmelec, order = c(2,1,3), seasonal = c(3,1,1), lambda = "auto", biasadj = T)
+m3 <- Arima(usmelec, order = c(2,1,3), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
+m4 <- Arima(usmelec, order = c(1,1,3), seasonal = c(2,1,2), lambda = "auto", biasadj = T)
+m5 <- Arima(usmelec, order = c(1,1,2), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
+m6 <- Arima(usmelec, order = c(1,1,1), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
+m7 <- Arima(usmelec, order = c(1,1,1), seasonal = c(3,1,1), lambda = "auto", biasadj = T)
+m1$aic
+m2$aic
+m3$aic
+m4$aic
+m5$aic
+m6$aic
+m7$aic
+
+#Best model based on AIC is m6 with lowest AIC value of -5082.634 compared to the other models.
+
+#(e)
+checkresiduals(m1)
+checkresiduals(m2)
+checkresiduals(m3)
+checkresiduals(m4)
+checkresiduals(m5)
+checkresiduals(m6)
+checkresiduals(m7)
+
+#Residuals of m6 resemble white noise. It also passes the Ljung-Box test with p-value of 0.08318.
+
+#(f)
 
 ```
 

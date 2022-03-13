@@ -58,33 +58,31 @@ Best model based on AIC is m6 with lowest AIC value of -5082.634 compared to the
 
 ```{r Q1 (e)}
 checkresiduals(m1)
+checkresiduals(m5)
 checkresiduals(m6)
-checkresiduals(m7)
 
 ```
 
 Since m7 has an AIC close to m6, we will consider it as well. 
 
-From the checkresidueals test, m1 (auto-arima) and m6 both pass the Ljung-box test with p-value of 0.07454 and 0.08318 respectively at 10% sig. level.
-m7 also pass the Ljung-box test with p-value of 0.04768 at 5% sig. level.
-
-Hence at 10% sig level, all 3 models have residuals that resemble white noise, and at 5% sig level, only m7 have residuals resembling resembling noise.
+From the checkresiduals test, all models both pass the Ljung-box test with p-value of 0.07454, 0.08662, 0.08318 respectively at 5% sig. level.
+Hence, all models have residuals resembling resembling noise at 5% sig level.
 
 
 ```{r Q1 (f)}
 latest_data <- read.csv("HW2 Q1 Cleaned Data.csv")
 latest_data_ts <- ts(latest_data["Amount"], start = c(2013,7), deltat = 1/12)
 accuracy(forecast(m1,h = 15*12), latest_data_ts)
+accuracy(forecast(m5,h = 15*12), latest_data_ts)
 accuracy(forecast(m6,h = 15*12), latest_data_ts)
-accuracy(forecast(m7,h = 15*12), latest_data_ts)
 
-autoplot(forecast(m7,h = 15*12), PI = F)
-autoplot(forecast(m7,h = 15*12), PI = T)
+autoplot(forecast(m1,h = 15*12), PI = F)
+autoplot(forecast(m1,h = 15*12), PI = T)
 
 ```
 
-From the accuracy tests, m1 attained the best RMSE score of 5.323888 in the train set. However, m7 performed the best in the test set with a RMSE score of 10.308077. Hence, m7 is the best model to use for prediction.
+From the accuracy tests, m1 attained the best RMSE score in the train and test set. Hence, m1 is the best model to use for prediction.
 
 Q1 (g)
-Since the predications of m7 is reasonably accurate, the general predictability of the trend, seasonality, and heteroskedastic attributes of the time series makes for a more accurate forecast. With such long and stable patterns in the data, predictions up to a decade would not be unseasonable. Afterwards, predictions may no longer be accurate, and should no longer be used.
+Since the predictions of m7 is reasonably accurate, the general predictability of the trend, seasonality, and heteroskedastic attributes of the time series makes for a more accurate forecast. With such long and stable patterns in the data, predictions up to a decade would not be unseasonable. Afterwards, predictions may no longer be accurate, and should no longer be used.
 

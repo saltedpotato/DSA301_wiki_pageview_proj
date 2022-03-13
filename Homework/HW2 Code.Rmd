@@ -2,7 +2,7 @@
 title: "R Notebook"
 
 ---
-Q1
+## Question 1
 ```{r Q1 install libraries}
 library(fpp2)
 library(forecast)
@@ -89,3 +89,65 @@ From the accuracy tests, m1 attained the best RMSE score in the train and test s
 Q1 (g)
 Since the predictions of m7 is reasonably accurate, the general predictability of the trend, seasonality, and heteroskedastic attributes of the time series makes for a more accurate forecast. With such long and stable patterns in the data, predictions up to a decade would not be unseasonable. Afterwards, predictions may no longer be accurate, and should no longer be used.
 
+#Question 2
+
+### Part 1
+```{r include=FALSE}
+rm(list = ls())
+library(fpp2)
+library(TSstudio)
+library(vars)
+```
+```{r eval=FALSE, include=FALSE}
+head(visnights)
+```
+Total quarterly visitor nights (in millions) from 1998-2016 for twenty regions of Australia within six states. The states are: New South Wales, Queensland, South Australia, Victoria, Western Australia, and Other
+
+### Part 2
+```{r}
+autoplot(visnights)
+```
+There does not appear to be a long term directional trend. However, there does appear to be yearly seasonality in the data. 
+
+### Part3
+Granger causation means that a variable is affected by lagged values of another variable. It is likely that the total quarterly visitor nights in 2 adjacent regions within the same state would Granger cause each other. An individual deciding to stay in a particular state has the choice of whether to stay in one of those regions, and they are therefore substitute goods. Hence, we have chosen NSWNthIn and NSWSthIn. 
+
+### Part 4
+```{r}
+index1 = which(colnames(visnights) == "NSWNthIn")
+index2 = which(colnames(visnights) == "NSWSthIn")
+
+print(index1)
+print(index2)
+
+autoplot(visnights[,index1])
+autoplot(visnights[,index2])
+```
+```{r}
+# Check for whether seasonal differencing is required
+nsdiffs(visnights[,index1])
+nsdiffs(visnights[,index2])
+ndiffs(visnights[,index1])
+ndiffs(visnights[,index2])
+```
+From our analysis of nsdiffs and ndiffs, the variables are already in their stationary form, without having to do any differencing.
+
+### Part 5
+```{r}
+grangertest(visnights[,index1], visnights[,index2], order = 1)
+grangertest(visnights[,index2], visnights[,index1], order = 1)
+```
+The p value from both granger causality tests are low (below 10%). The p value from the granger casuality test testing whether NSWNthIn granger causes NSWSthIn is 9.483e-05, and p value from the opposite granger test is 0.07582. 
+
+
+### Part 6
+```{r}
+combined_df = cbind(visnights[,index1],visnights[,index2])
+VARselect(combined_df, lag.max = 8)
+```
+
+```{r}
+var1 = VAR(combined_df, p =1, type = "const")
+serial.test(var1, lags.pt = 10, type = "PT.asymptotic")
+```
+We perform the Ljung Box test on the residuals. The probability of achieving a test statistic at least or more extreme than that which we achieve is 0.1935. Hence, we reject the null hypothesis - there is indeed no time series information in the residuals. 

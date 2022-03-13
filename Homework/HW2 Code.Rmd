@@ -63,7 +63,7 @@ checkresiduals(m6)
 
 ```
 
-Since m7 has an AIC close to m6, we will consider it as well. 
+Since m5 has an AIC close to m6, we will consider it as well. 
 
 From the checkresiduals test, all models both pass the Ljung-box test with p-value of 0.07454, 0.08662, 0.08318 respectively at 5% sig. level.
 Hence, all models have residuals resembling resembling noise at 5% sig level.

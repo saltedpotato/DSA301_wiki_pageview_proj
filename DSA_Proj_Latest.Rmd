@@ -95,6 +95,7 @@ seasadj_wiki %>%
 
 trans_seasadj_wiki <- seasadj_wiki %>% diff(lag = 7)%>%diff(lag = 1)
 autoplot(trans_seasadj_wiki)
+acf(trans_seasadj_wiki)
 ```
 
 

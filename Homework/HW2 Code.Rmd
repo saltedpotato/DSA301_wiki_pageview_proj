@@ -34,6 +34,9 @@ boxcox_usmelec%>%
   diff() %>%
   ur.kpss()%>%
   summary()
+
+acf(boxcox_usmelec)
+acf(diff(diff(boxcox_usmelec,12)))
 ```
 From the KPSS test, we can see that the data is not stationary with a test statistic of 7.8337, which is larger than the critical values in 1pct. Hence, we check if differencing is needed using nsdiffs and ndiffs. After differencing, the KPSS test statistic is lowered to 0.0167, which is lower than the critical value in 10pct.
 

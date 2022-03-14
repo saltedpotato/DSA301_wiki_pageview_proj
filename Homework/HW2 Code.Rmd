@@ -11,14 +11,14 @@ library(urca)
 
 ```{r Q1 (a)}
 autoplot(ma(usmelec,12,centre = TRUE))
-
+autoplot(usmelec)
 ```
 
 ```{r Q1 (b)}
 boxcox_usmelec <- BoxCox(usmelec,BoxCox.lambda(usmelec))
 autoplot(boxcox_usmelec)
 ```
-From part (a), we can see that the variance of the autoplot is not constant, and therefore BoxCox transformation should be employed.
+From part (a), we can see that the variance of the autoplot is not constant and increases with the level, and therefore BoxCox transformation should be employed.
 
 
 ```{r Q1 (c)}
@@ -90,7 +90,7 @@ autoplot(forecast(m3,h = 15*12), PI = F)
 autoplot(forecast(m3,h = 15*12), PI = T)
 ```
 
-From the accuracy tests, m3 attained the best RMSE score in the train and test set. Hence, m1 is the best model to use for prediction.
+From the accuracy tests, m3 attained the best RMSE score in the train and test set. Hence, m3 is the best model to use for prediction.
 
 Q1 (g)
 ```{r}

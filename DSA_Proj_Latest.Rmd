@@ -93,12 +93,11 @@ seasadj_wiki %>%
   ur.kpss()%>%
   summary()
 
-trans_seasadj_wiki <- seasadj_wiki %>% diff(lag = 7)%>%diff(lag = 1)
-autoplot(trans_seasadj_wiki)
-acf(trans_seasadj_wiki)
+trans_seasadj_wiki_1 <- seasadj_wiki %>%diff(lag = 1)
+trans_seasadj_wiki_2 <- seasadj_wiki %>%diff(lag = 7)%>%diff(lag = 1)
+autoplot(trans_seasadj_wiki_1)
+autoplot(trans_seasadj_wiki_2)
 ```
-
-
 
 
 Fitting Models on Transformed Data
@@ -106,56 +105,83 @@ Fitting Models on Transformed Data
 #Benchmark Models (Need to clarify with Prof on how to transform back after we only apply differencing to seasonal adjusted component. Refer to Lecture 6 hmwk 2 code (he applied differencing to time series before decomposition))
 b1 <- stlf(wiki_daily_split$train, method = "naive", robust = T)
 b2 <- stlf(wiki_daily_split$train, method = "rwdrift", robust = T)
+```
 
+```{r}
 #ARIMA Models
-ggtsdisplay(trans_seasadj_wiki)
-Pacf(trans_seasadj_wiki)
-Acf(trans_seasadj_wiki)
+ggtsdisplay(seasadj_wiki)
+pacf(seasadj_wiki)
+acf(seasadj_wiki)
 
+ggtsdisplay(trans_seasadj_wiki_1)
+pacf(trans_seasadj_wiki_1)
+acf(trans_seasadj_wiki_1)
 
+ggtsdisplay(trans_seasadj_wiki_2)
+pacf(trans_seasadj_wiki_2)
+acf(trans_seasadj_wiki_2)
+```
+
+```{r}
 #Testing out Seasonal ARIMA with stlm. NEED HELP WITH READING ACF & PACF!!! 
 #ASK PROF ON THURSDAY. Update: Prof say can just mention that the graphs got show  some MA or AR orders and that supports our models (e.g. we got MA and AR components)
 
-auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
+A0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
+A1 <- Arima(seasadj_wiki, order=c(1,1,3), seasonal = list(order = c(3,0,3), period = 7))
+A2 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,2), period = 7))
+A3 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(1,0,3), period = 7))
+A4 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,1,2), period = 7))
+A5 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,2), period = 7))
+A6 <- Arima(seasadj_wiki, order=c(4,1,3), seasonal = list(order = c(2,1,2), period = 7))
+A7 <- Arima(seasadj_wiki, order=c(4,1,1), seasonal = list(order = c(2,1,2), period = 7))
 
-#Ask prof why does this not work. When I tried it on the seasonal adjusted comp. of full data by accident, this does not throw the Error in optim(init[mask], armafn, method = optim.method, hessian = TRUE, : non-finite finite-difference value [7]. Even when using stlm on training data there is no error. Why is it that when i use Arima on training data, in the below comment it doesn't work?
+model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"),
+                       AIC = c(A0$aic, A1$aic, A2$aic, A3$aic, A4$aic, A5$aic, A6$aic, A7$aic))
+model_AIC
 
-# m1 <-  Arima(seasadj_wiki, order=c(4,1,1), seasonal = list(order = c(2,0,2), period = 7))
 
+#Only only that passed were (4,1,3)(2,1,2)[7] and (4,1,3)(1,0,2)[7]
 f0 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
          seasonal = list(order = c(2,0,2), period = 7), robust = T)
 
-f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,3), 
+f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(1,1,3), 
+         seasonal = list(order = c(3,0,3), period = 7), robust = T)
+
+f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
+         seasonal = list(order = c(2,0,2), period = 7), robust = T)
+
+f3 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
+         seasonal = list(order = c(1,0,3), period = 7), robust = T)
+
+f4 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
          seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
-f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,3), 
-         seasonal = list(order = c(1,0,2), period = 7), robust = T)
-
-f3 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
-         seasonal = list(order = c(1,1,2), period = 7), robust = T)
-
-f4 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
+f5 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3), 
          seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
-f5 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,1), 
-         seasonal = list(order = c(2,0,1), period = 7), robust = T)
+f6 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,3), 
+         seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
+f7 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
+         seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
 checkresiduals(forecast(f0))
 checkresiduals(forecast(f1))
 checkresiduals(forecast(f2))
 checkresiduals(forecast(f3))
 checkresiduals(forecast(f4))
+checkresiduals(forecast(f5))
+checkresiduals(forecast(f6))
+checkresiduals(forecast(f7))
 checkresiduals(b1)
 checkresiduals(b2)
 
-#Only f1 passed the Ljung-Box Test for the train set
-accuracy(forecast(f0), wiki_daily_split$test)
-accuracy(forecast(f1), wiki_daily_split$test)
-accuracy(forecast(f2), wiki_daily_split$test)
+#Only f5 and f6 passed the Ljung-Box Test for the train set
+accuracy(forecast(f5), wiki_daily_split$test)
+accuracy(forecast(f6), wiki_daily_split$test)
 
 
-autoplot(msts_wiki_daily)+autolayer(forecast(f1), PI = F, alpha = 0.7, col = "red")
+autoplot(msts_wiki_daily)+autolayer(forecast(f5), PI = F, alpha = 0.7, col = "red")
 ```
 
 

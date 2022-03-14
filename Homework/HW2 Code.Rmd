@@ -43,10 +43,16 @@ From the KPSS test, we can see that the data is not stationary with a test stati
 ```{r Q1 (d)}
 ggtsdisplay(boxcox_usmelec)
 ggtsdisplay(diff(diff(boxcox_usmelec,12)))
+```
+Based on the PACF plot of the transformed data, there may be presence of seasonal MA and non-seasonal MA due to the exponentially decaying PACF values at the seasonal lags and non-seasonal lags respectively. With reference to the ACF plot, seasonal MA could be 1 due to the spike at lag 12 and non-seasonal MA could be 3 due to the 3 significant spikes in ACF.
 
+For AR, it is difficult to distinguish what order it has for both non-seasonal and seasonal as PACF plot could have been affected by the MA portion.From the ACF plot, we assume it is not a pure MA model as there are significant spikes outside of the relevant seasonal and non seasonal lags. From PACF, seasonal AR order could be 3 due to significant spikes at seasonal lags in PACF, and non-seasonal AR order could be 2 due to significant spikes in first 2 lags. It could also be 0 or 1 as PACF spikes might be a result of MA instead of AR.
+
+As it is difficult to distinguish the order based on the ACF and PACF plots alone, we plan to test a few models by changing the orders around.
+```{r}
 m1 <- auto.arima(usmelec, lambda = "auto", biasadj = T) #(1,1,3)(2,1,1)[12]
 m2 <- Arima(usmelec, order = c(2,1,3), seasonal = c(3,1,1), lambda = "auto", biasadj = T)
-m3 <- Arima(usmelec, order = c(2,1,3), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
+m3 <- Arima(usmelec, order = c(0,1,3), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
 m4 <- Arima(usmelec, order = c(1,1,3), seasonal = c(2,1,2), lambda = "auto", biasadj = T)
 m5 <- Arima(usmelec, order = c(1,1,2), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
 m6 <- Arima(usmelec, order = c(1,1,1), seasonal = c(2,1,1), lambda = "auto", biasadj = T)
@@ -61,14 +67,14 @@ Best model based on AIC is m6 with lowest AIC value of -5082.634 compared to the
 
 ```{r Q1 (e)}
 checkresiduals(m1)
+checkresiduals(m3)
 checkresiduals(m5)
 checkresiduals(m6)
-
 ```
 
-Since m5 has an AIC close to m6, we will consider it as well. 
+Since m3 and m5 has an AIC close to m6, we will consider it as well. 
 
-From the checkresiduals test, all models both pass the Ljung-box test with p-value of 0.07454, 0.08662, 0.08318 respectively at 5% sig. level.
+From the checkresiduals test, all models both pass the Ljung-box test with p-value of 0.07454, 0.07518, 0.08662, 0.08318 respectively at 5% sig. level.
 Hence, all models have residuals resembling resembling noise at 5% sig level.
 
 
@@ -76,17 +82,23 @@ Hence, all models have residuals resembling resembling noise at 5% sig level.
 latest_data <- read.csv("HW2 Q1 Cleaned Data.csv")
 latest_data_ts <- ts(latest_data["Amount"], start = c(2013,7), deltat = 1/12)
 accuracy(forecast(m1,h = 15*12), latest_data_ts)
+accuracy(forecast(m3,h = 15*12), latest_data_ts)
 accuracy(forecast(m5,h = 15*12), latest_data_ts)
 accuracy(forecast(m6,h = 15*12), latest_data_ts)
 
-autoplot(forecast(m1,h = 15*12), PI = F)
-autoplot(forecast(m1,h = 15*12), PI = T)
-
+autoplot(forecast(m3,h = 15*12), PI = F)
+autoplot(forecast(m3,h = 15*12), PI = T)
 ```
 
-From the accuracy tests, m1 attained the best RMSE score in the train and test set. Hence, m1 is the best model to use for prediction.
+From the accuracy tests, m3 attained the best RMSE score in the train and test set. Hence, m1 is the best model to use for prediction.
 
 Q1 (g)
+```{r}
+m3_forecast <-forecast(m3,h = 15*12)
+interval_range_80 <- m3_forecast$upper[,1]-m3_forecast$lower[,1]
+m3_forecast$mean/interval_range_80
+```
+
 Since the predictions of m7 is reasonably accurate, the general predictability of the trend, seasonality, and heteroskedastic attributes of the time series makes for a more accurate forecast. With such long and stable patterns in the data, predictions up to a decade would not be unseasonable. Afterwards, predictions may no longer be accurate, and should no longer be used.
 
 #Question 2

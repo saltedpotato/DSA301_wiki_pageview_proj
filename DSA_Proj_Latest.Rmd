@@ -193,6 +193,8 @@ autoplot(msts_wiki_daily)+autolayer(forecast(f5), PI = F, alpha = 0.7, col = "re
 
 ##RNN
 ```{r}
+# set a random seed for reproducability
+set.seed(123)
 library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
@@ -201,15 +203,12 @@ max_len <- 6 # the number of previous examples we'll look at
 batch_size <- 32 # number of sequences to look at at one time during training
 total_epochs <- 15 # how many times we'll look @ the whole dataset while training our model
 
-# set a random seed for reproducability
-set.seed(123)
-
 views <- daily_data$views
 
 # Cut the text in overlapping sample sequences of max_len characters
 
 # get a list of start indexes for our (overlapping) chunks
-start_indexes <- seq(1, length(views) - (max_len + 1), by = 7)
+start_indexes <- seq(1, length(views) - (max_len + 1), by = 1)
 
 # create an empty matrix to store our data in
 views_matrix <- matrix(nrow = length(start_indexes), ncol = max_len + 1)
@@ -248,11 +247,12 @@ model = keras_model_sequential() %>%
  
 model %>% compile(loss = 'mse',
                   optimizer = 'RMSprop',
-                  metrics = list("mean_squared_error")
-                   )
- 
+                  metrics = list("mean_squared_error"))
 model %>% summary()
-model %>% fit(X_train,y_train, epochs=50, batch_size=32, shuffle = FALSE,validation_split = 0.2 )
+
+
+
+model %>% fit(X_train,y_train, epochs=50, batch_size= 32, shuffle = FALSE,validation_split = 0.2 )
 
 model %>% evaluate(X_test, y_test, verbose = 0)
 
@@ -263,11 +263,6 @@ lines(x_axes, y_pred, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"),
         col=c("red", "blue"), lty=1,cex=0.8)
 
-
-
 ```
 
-```{r}
-views_matrix
-```
 

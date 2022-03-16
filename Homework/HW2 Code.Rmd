@@ -17,8 +17,10 @@ autoplot(usmelec)
 ```{r Q1 (b)}
 boxcox_usmelec <- BoxCox(usmelec,BoxCox.lambda(usmelec))
 autoplot(boxcox_usmelec)
+
+autoplot(mstl(boxcox_usmelec))
 ```
-From part (a), we can see that the variance of the autoplot is not constant and increases with the level, and therefore BoxCox transformation should be employed.
+From part (a), we can see that the variance of the autoplot is not constant and increases with the level, it could be indicative of a multiplicative model and therefore BoxCox transformation should be employed. We also opted to model Arima models directly onto boxcox transformed data instead of the seasonally adjusted component after mstl decomposition on the boxcox data as the seasonal component is almost negligible compared to the trend as seen in the decomposition plot.
 
 
 ```{r Q1 (c)}
@@ -98,8 +100,8 @@ m3_forecast <-forecast(m3,h = 15*12)
 interval_range_80 <- m3_forecast$upper[,1]-m3_forecast$lower[,1]
 m3_forecast$mean/interval_range_80
 ```
-
-Since the predictions of m7 is reasonably accurate, the general predictability of the trend, seasonality, and heteroskedastic attributes of the time series makes for a more accurate forecast. With such long and stable patterns in the data, predictions up to a decade would not be unseasonable. Afterwards, predictions may no longer be accurate, and should no longer be used.
+4 years of forecasts would be sufficiently accurate to be usable. At 4 years, there is still high ratio of numerical forecast to the width of the 80% prediction interval at approximately 4. Furthermore, the trend and seasonality is also relatively stable for the usmelec data.
+ 
 
 #Question 2
 

@@ -282,8 +282,8 @@ batch_size <- 32 # number of sequences to look at at one time during training
 total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
 
-model = keras_model_sequential() %>%   
-   layer_lstm(units=max_len, input_shape=c(, 1), activation="relu") %>%  
+model <-  keras_model_sequential() %>%   
+   layer_lstm(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
    #layer_dense(units=6, activation = "relu") %>%  
    layer_dense(units=1, activation = "linear")
  

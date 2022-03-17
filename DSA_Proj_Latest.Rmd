@@ -201,7 +201,7 @@ library(caret) # machine learning utility functions
 
 max_len <- 6 # the number of previous examples we'll look at
 batch_size <- 32 # number of sequences to look at at one time during training
-total_epochs <- 15 # how many times we'll look @ the whole dataset while training our model
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
 views <- daily_data$views
 
@@ -241,8 +241,7 @@ y_test <- y[-training_index]
 
 model = keras_model_sequential() %>%   
    layer_simple_rnn(units=6, input_shape=c(6, 1), activation="relu") %>%  
-   layer_dense(units=6, activation = "relu") %>%  
-   #layer_dense(units=32) %>%  
+   #layer_dense(units=6, activation = "relu") %>%  
    layer_dense(units=1, activation = "linear")
  
 model %>% compile(loss = 'mse',
@@ -250,12 +249,11 @@ model %>% compile(loss = 'mse',
                   metrics = list("mean_squared_error"))
 model %>% summary()
 
+model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
 
-
-model %>% fit(X_train,y_train, epochs=50, batch_size= 32, shuffle = FALSE,validation_split = 0.2 )
-
-model %>% evaluate(X_test, y_test, verbose = 0)
-
+rnn_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
+rmse_rnn <- sqrt(rnn_outcome[2])
+rmse_rnn
 y_pred = model %>% predict(X_test)
 x_axes = seq(1:length(y_pred))
 plot(x_axes, y_test, type="l", col="red", lwd=2)

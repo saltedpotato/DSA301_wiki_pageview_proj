@@ -191,17 +191,18 @@ accuracy(forecast(f6), wiki_daily_split$test)
 autoplot(msts_wiki_daily)+autolayer(forecast(f5), PI = F, alpha = 0.7, col = "red")
 ```
 
-##RNN
-```{r}
-# set a random seed for reproducability
-set.seed(123)
+###########################################
+DEEP LEARNING
+##########################################
+
+```{r Load packages}
 library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
+```
 
-max_len <- 6 # the number of previous examples we'll look at
-batch_size <- 32 # number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+```{r Preprocessing}
+max_len <- 7 # the number of previous examples we'll look at
 
 views <- daily_data$views
 
@@ -235,10 +236,18 @@ y_train <- y[training_index]
 # testing data
 X_test <- array(X[-training_index,], dim = c(length(y) - length(training_index), max_len, 1))
 y_test <- y[-training_index]
+```
+
+```{r RNN}
+# set a random seed for reproducability
+set.seed(123)
+
+batch_size <- 32 # number of sequences to look at at one time during training
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
 
 model = keras_model_sequential() %>%   
-   layer_simple_rnn(units=6, input_shape=c(6, 1), activation="relu") %>%  
+   layer_simple_rnn(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
    #layer_dense(units=6, activation = "relu") %>%  
    layer_dense(units=1, activation = "linear")
  

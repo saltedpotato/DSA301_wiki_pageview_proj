@@ -226,9 +226,7 @@ if(anyNA(views_matrix)){
 X <- views_matrix[,-ncol(views_matrix)]
 y <- views_matrix[,ncol(views_matrix)]
 
-training_index <- createDataPartition(y, p = .8, 
-                                  list = FALSE, 
-                                  times = 1)
+training_index <- seq(1,floor(0.8*length(views)))
 
 # training data
 X_train <- array(X[training_index,], dim = c(length(training_index), max_len, 1))
@@ -263,4 +261,8 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 
 ```
 
+```{r}
+head(y_test)
+head(wiki_daily_split$test,10)
+```
 

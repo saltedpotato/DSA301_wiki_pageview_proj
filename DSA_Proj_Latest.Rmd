@@ -274,4 +274,34 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 head(y_test)
 head(wiki_daily_split$test,10)
 ```
+```{r LSTM}
+# set a random seed for reproducability
+set.seed(123)
 
+batch_size <- 32 # number of sequences to look at at one time during training
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+
+
+model = keras_model_sequential() %>%   
+   layer_lstm(units=max_len, input_shape=c(, 1), activation="relu") %>%  
+   #layer_dense(units=6, activation = "relu") %>%  
+   layer_dense(units=1, activation = "linear")
+ 
+model %>% compile(loss = 'mse',
+                  optimizer = 'RMSprop',
+                  metrics = list("mean_squared_error"))
+model %>% summary()
+
+model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
+
+lstm_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
+rmse_lstm <- sqrt(lstm_outcome[2])
+rmse_lstm
+y_pred = model %>% predict(X_test)
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+
+```

@@ -8,10 +8,8 @@ Questions:
 3. How to read the PACF & ACF graphs? Currently just using guess and check from changing models provided by auto.arima
 
 ##Loading Packages
-```{r cars}
-# install.packages("pageviews")
-# install.packages("jsonlite")
-# install.packages("lubridate")
+```{r cars, include=FALSE}
+rm(list = ls())
 library(jsonlite)
 library(pageviews)
 library(lubridate)
@@ -19,7 +17,9 @@ library(dplyr)
 library(forecast)
 library(urca)
 library(TSstudio)
-rm(list = ls())
+library(keras)
+library(tidyverse)
+library(caret)
 ```
 
 ##Getting the daily data
@@ -31,27 +31,26 @@ granularity = "daily"
 start = "2015010100"
 end = "2022013123"
 url_daily = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, granularity, start, end)
-url_hourly = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, "hourly", start, end)
 daily_data = fromJSON(txt=url_daily)$items
-hourly_data = fromJSON(txt= url_hourly)$items
+
+# url_hourly = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, "hourly", start, end)
+# hourly_data = fromJSON(txt= url_hourly)$items
 
 ```
 
-##Converting Raw Data to Time Series
+## Getting train and test sets
 ```{r}
 msts_wiki_daily <- daily_data$views %>% 
   msts(seasonal.periods = c(7, 365), 
        start = decimal_date(as.Date("2015-07-01")))
 
-autoplot(msts_wiki_daily)
+# Changing the units of the data to represent number of views in millions
+msts_wiki_daily = msts_wiki_daily / 1000000
+# autoplot(msts_wiki_daily)
+wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = ceiling(length(msts_wiki_daily) * 0.2))
 ```
 
-##Splitting Test & Train Data
-```{r}
-wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = 482)
-```
-
-##Visualising & Decomposing Time Series
+##Visualising & Decomposing Time Series using STL
 ```{r}
 wiki_daily_decomp_train <- mstl(wiki_daily_split$train)
 autoplot(wiki_daily_decomp_train)
@@ -60,6 +59,10 @@ autoplot(wiki_daily_decomp_train)
 ##Differencing Seasonal Adjusted Component
 ```{r}
 seasadj_wiki <- seasadj(wiki_daily_decomp_train)
+
+# Test stat = 5
+seasadj_wiki %>% ur.kpss() %>% summary()
+# The null hypothesis is that the data is stationary. Our p value is very small, we reject the null hypothesis. We will need to do differencing
 
 #Test stat = 0.011
 seasadj_wiki %>% 
@@ -111,6 +114,7 @@ b2 <- stlf(wiki_daily_split$train, method = "rwdrift", robust = T)
 ```{r}
 checkresiduals(b1)
 checkresiduals(b2)
+# The p values are very low. We reject the null hypothesis that the data is independently distributed. We conclude that the data is not independently distributed and exhibits serial correlation. 
 ```
 
 ##ARIMA Models
@@ -201,10 +205,11 @@ library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
 ```
 
+PREPROCESSING
 ```{r Preprocessing}
 max_len <- 7 # the number of previous examples we'll look at
 
-views <- daily_data$views
+views <- daily_data$views / 1000000
 
 # Cut the text in overlapping sample sequences of max_len characters
 
@@ -238,6 +243,7 @@ X_test <- array(X[-training_index,], dim = c(length(y) - length(training_index),
 y_test <- y[-training_index]
 ```
 
+Training the RNN Model
 ```{r RNN}
 # set a random seed for reproducability
 set.seed(123)

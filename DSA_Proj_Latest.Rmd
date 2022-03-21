@@ -209,8 +209,13 @@ PREPROCESSING
 ```{r Preprocessing}
 max_len <- 7 # the number of previous examples we'll look at
 
-views <- daily_data$views / 1000000
 
+scale_factors <- c(mean(views_train), sd(views_train))
+
+scaled_train <- (views_train - scale_factors[1]) / scale_factors[2] #normalise data
+
+scaled_train <- as.matrix(scaled_train)
+ 
 # Cut the text in overlapping sample sequences of max_len characters
 
 # get a list of start indexes for our (overlapping) chunks
@@ -232,7 +237,7 @@ if(anyNA(views_matrix)){
 X <- views_matrix[,-ncol(views_matrix)]
 y <- views_matrix[,ncol(views_matrix)]
 
-training_index <- seq(1,floor(0.8*length(views)))
+training_index <- seq(1,floor(0.8*length(views) - 8))
 
 # training data
 X_train <- array(X[training_index,], dim = c(length(training_index), max_len, 1))
@@ -251,8 +256,9 @@ set.seed(123)
 batch_size <- 32 # number of sequences to look at at one time during training
 total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
+model = NULL
 
-model = keras_model_sequential() %>%   
+model <- keras_model_sequential() %>%   
    layer_simple_rnn(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
    #layer_dense(units=6, activation = "relu") %>%  
    layer_dense(units=1, activation = "linear")
@@ -276,10 +282,6 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 
 ```
 
-```{r}
-head(y_test)
-head(wiki_daily_split$test,10)
-```
 ```{r LSTM}
 # set a random seed for reproducability
 set.seed(123)
@@ -294,8 +296,8 @@ model <-  keras_model_sequential() %>%
    layer_dense(units=1, activation = "linear")
  
 model %>% compile(loss = 'mse',
-                  optimizer = 'RMSprop',
-                  metrics = list("mean_squared_error"))
+                  optimizer = 'Adam',
+                  metrics = 'mae')
 model %>% summary()
 
 model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))

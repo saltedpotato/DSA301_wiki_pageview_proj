@@ -45,7 +45,7 @@ msts_wiki_daily <- daily_data$views %>%
        start = decimal_date(as.Date("2015-07-01")))
 
 # Changing the units of the data to represent number of views in millions
-msts_wiki_daily = msts_wiki_daily / 1000000
+#msts_wiki_daily = msts_wiki_daily / 1000000
 # autoplot(msts_wiki_daily)
 wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = ceiling(length(msts_wiki_daily) * 0.2))
 ```
@@ -114,6 +114,8 @@ b2 <- stlf(wiki_daily_split$train, method = "rwdrift", robust = T)
 ```{r}
 checkresiduals(b1)
 checkresiduals(b2)
+accuracy(b1, wiki_daily_split$test)
+accuracy(b2, wiki_daily_split$test)
 # The p values are very low. We reject the null hypothesis that the data is independently distributed. We conclude that the data is not independently distributed and exhibits serial correlation. 
 ```
 
@@ -137,15 +139,16 @@ acf(trans_seasadj_wiki_2)
 #ASK PROF ON THURSDAY. Update: Prof say can just mention that the graphs got show  some MA or AR orders and that supports our models (e.g. we got MA and AR components)
 
 A0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
-A1 <- Arima(seasadj_wiki, order=c(1,1,3), seasonal = list(order = c(3,0,3), period = 7))
-A2 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,2), period = 7))
-A3 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(1,0,3), period = 7))
-A4 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,1,2), period = 7))
-A5 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,2), period = 7))
-A6 <- Arima(seasadj_wiki, order=c(4,1,3), seasonal = list(order = c(2,1,2), period = 7))
-A7 <- Arima(seasadj_wiki, order=c(4,1,1), seasonal = list(order = c(2,1,2), period = 7))
+A1 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(3,0,3), period = 7))
+A2 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,3), period = 7))
+A3 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,2), period = 7))
+A4 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,0,2), period = 7))
 
-model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"),
+A5 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,1,1), period = 7))
+A6 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7))
+A7 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,2), period = 7))
+
+model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
                        AIC = c(A0$aic, A1$aic, A2$aic, A3$aic, A4$aic, A5$aic, A6$aic, A7$aic))
 model_AIC
 ```
@@ -154,45 +157,47 @@ model_AIC
 ```{r}
 
 #Only only that passed were (4,1,3)(2,1,2)[7] and (4,1,3)(1,0,2)[7]
-# f0 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
-#          seasonal = list(order = c(2,0,2), period = 7), robust = T)
-# 
-# f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(1,1,3), 
-#          seasonal = list(order = c(3,0,3), period = 7), robust = T)
-# 
-# f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
-#          seasonal = list(order = c(2,0,2), period = 7), robust = T)
-# 
-# f3 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
-#          seasonal = list(order = c(1,0,3), period = 7), robust = T)
-# 
-# f4 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
-#          seasonal = list(order = c(2,1,2), period = 7), robust = T)
+f0 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1),
+         seasonal = list(order = c(2,0,2), period = 7), robust = T) 
 
-f5 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3), 
-         seasonal = list(order = c(2,1,2), period = 7), robust = T)
+f1 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3),
+         seasonal = list(order = c(3,0,3), period = 7), robust = T) 
 
-f6 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,3), 
-         seasonal = list(order = c(2,1,2), period = 7), robust = T)
+f2 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3),
+         seasonal = list(order = c(2,0,3), period = 7), robust = T) 
 
-f7 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(4,1,1), 
-         seasonal = list(order = c(2,1,2), period = 7), robust = T)
+f3 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3),
+         seasonal = list(order = c(2,0,2), period = 7), robust = T) 
 
-# checkresiduals(forecast(f0))
-# checkresiduals(forecast(f1))
-# checkresiduals(forecast(f2))
-# checkresiduals(forecast(f3))
-# checkresiduals(forecast(f4))
+f4 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3),
+         seasonal = list(order = c(2,0,2), period = 7), robust = T)
+
+f5 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(2,1,3), 
+         seasonal = list(order = c(2,1,1), period = 7), robust = T) 
+
+f6 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3), 
+         seasonal = list(order = c(2,1,1), period = 7), robust = T) 
+
+f7 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3), 
+          seasonal = list(order = c(2,1,2), period = 7), robust = T) 
+
+checkresiduals(forecast(f0))
+checkresiduals(forecast(f1))
+checkresiduals(forecast(f2))
+checkresiduals(forecast(f3))
+checkresiduals(forecast(f4))
 checkresiduals(forecast(f5))
 checkresiduals(forecast(f6))
 checkresiduals(forecast(f7))
 
-#Only f5 and f6 passed the Ljung-Box Test for the train set
+#Only f5, f6, f7 passed the Ljung-Box Test for the train set
+accuracy(forecast(f4), wiki_daily_split$test)
 accuracy(forecast(f5), wiki_daily_split$test)
 accuracy(forecast(f6), wiki_daily_split$test)
+accuracy(forecast(f7), wiki_daily_split$test)
 
-
-autoplot(msts_wiki_daily)+autolayer(forecast(f5), PI = F, alpha = 0.7, col = "red")
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
 ```
 
 ###########################################

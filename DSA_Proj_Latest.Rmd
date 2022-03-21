@@ -264,12 +264,12 @@ total_epochs <- 50 # how many times we'll look @ the whole dataset while trainin
 model = NULL
 
 model <- keras_model_sequential() %>%   
-   layer_simple_rnn(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
-   #layer_dense(units=6, activation = "relu") %>%  
-   layer_dense(units=1, activation = "linear")
+  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
+  layer_simple_rnn(units=6, activation = "relu") %>%  
+  layer_dense(units=1, activation = "linear")
  
 model %>% compile(loss = 'mse',
-                  optimizer = 'RMSprop',
+                  optimizer = 'adam',
                   metrics = list("mean_squared_error"))
 model %>% summary()
 
@@ -291,18 +291,20 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 # set a random seed for reproducability
 set.seed(123)
 
-batch_size <- 32 # number of sequences to look at at one time during training
+batch_size <- 16 # number of sequences to look at at one time during training
 total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
+model <- NULL
 
 model <-  keras_model_sequential() %>%   
-   layer_lstm(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
-   #layer_dense(units=6, activation = "relu") %>%  
-   layer_dense(units=1, activation = "linear")
+  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
+  layer_lstm(units=64, activation = "relu") %>%
+  layer_dense(units=20, activation = "relu") %>%
+  layer_dense(units=1, activation = "linear")
  
 model %>% compile(loss = 'mse',
-                  optimizer = 'Adam',
-                  metrics = 'mae')
+                  optimizer = 'adam',
+                  metrics = list("mean_squared_error"))
 model %>% summary()
 
 model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))

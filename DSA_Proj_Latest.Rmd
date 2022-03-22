@@ -22,21 +22,29 @@ library(tidyverse)
 library(caret)
 ```
 
-##Getting the daily data
+## Importing Data Using Library
 ```{r pressure, echo=FALSE}
-project = "en.wikipedia.org"
-access = "all-access"
-agent = "all-agents"
-granularity = "daily"
-start = "2015010100"
-end = "2022013123"
-url_daily = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, granularity, start, end)
-daily_data = fromJSON(txt=url_daily)$items
-
+# project = "en.wikipedia.org"
+# access = "all-access"
+# agent = "all-agents"
+# granularity = "daily"
+# start = "2015010100"
+# end = "2022013123"
+# url_daily = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, granularity, start, end)
+# daily_data = fromJSON(txt=url_daily)$items
+# data.frame(views = daily_data$views) %>% write_csv(., 'dailydata.csv')
 # url_hourly = sprintf("https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/%s/%s/%s/%s/%s/%s", project, access, agent, "hourly", start, end)
 # hourly_data = fromJSON(txt= url_hourly)$items
 
 ```
+
+### Reading CSV
+```{r}
+daily_data = read_csv('dailydata.csv')
+daily_data$views = daily_data$views / 1000000
+# head(daily_data)
+```
+
 
 ## Getting train and test sets
 ```{r}
@@ -320,7 +328,8 @@ set.seed(123)
 batch_size <- 16 # number of sequences to look at at one time during training
 total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
-model <- NULL
+model <- NULLri
+
 
 model <-  keras_model_sequential() %>%   
   layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  

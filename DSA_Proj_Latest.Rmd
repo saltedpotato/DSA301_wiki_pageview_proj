@@ -320,3 +320,17 @@ legend("topleft", legend=c("y-original", "y-predicted"),
         col=c("red", "blue"), lty=1,cex=0.8)
 
 ```
+
+
+nnetar function
+```{r} 
+
+NN_model = stlm(wiki_daily_split$train, modelfunction=forecast::nnetar)
+autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
+accuracy(forecast(NN_model, h= 482), wiki_daily_split$test)
+
+NN_model2 = nnetar(wiki_daily_split$train)
+autoplot(msts_wiki_daily)+autolayer(forecast(NN_model2, h = 482))
+accuracy(forecast(NN_model2, h= 482), wiki_daily_split$test)
+```
+

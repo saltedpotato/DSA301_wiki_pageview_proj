@@ -41,20 +41,23 @@ library(caret)
 ### Reading CSV
 ```{r}
 daily_data = read_csv('dailydata.csv')
+
+# Changing the units
 daily_data$views = daily_data$views / 1000000
-# head(daily_data)
 ```
 
 
-## Getting train and test sets
+## Preprocessing
 ```{r}
 msts_wiki_daily <- daily_data$views %>% 
   msts(seasonal.periods = c(7, 365), 
        start = decimal_date(as.Date("2015-07-01")))
+# 
+# msts_wiki_daily <- daily_data$views %>% 
+#   msts(seasonal.periods = c(7, 365), 
+#        start = c(2015,7,1),
+#        end = c(2022,1,31))
 
-# Changing the units of the data to represent number of views in millions
-#msts_wiki_daily = msts_wiki_daily / 1000000
-# autoplot(msts_wiki_daily)
 wiki_daily_split <- ts_split(msts_wiki_daily, sample.out = ceiling(length(msts_wiki_daily) * 0.2))
 ```
 
@@ -188,6 +191,9 @@ f6 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3),
 
 f7 = stlm(wiki_daily_split$train, modelfunction = Arima, order=c(3,1,3), 
           seasonal = list(order = c(2,1,2), period = 7), robust = T) 
+
+# ERROR stating non-finite finite-difference value. This is related to the stationarity of the data according to stackoverflow. Cannot do MLE when the data is not stationary. 
+
 
 checkresiduals(forecast(f0))
 checkresiduals(forecast(f1))
@@ -389,4 +395,57 @@ autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
 autoplot(NN_forecast)
 accuracy(NN_forecast,wiki_daily_split$test)
 ```
+
+
+
+
+
+
+
+
+
+
+# Sean Attempt
+Facebook Prophet attempt
+```{r}
+# install.packages('prophet')
+library('prophet')
+```
+```{r}
+# Pre processing for prophet model
+daily_data = read_csv('dailydata.csv')
+daily_data$views = daily_data$views / 1000000
+inds = seq(from = as.Date("2015-07-01"), to = as.Date("2022-01-31"), by = "day")
+daily_data$ds = inds
+daily_data = rename(daily_data, y = views)
+
+# Creating train and test set
+train_index = floor(0.8*dim(daily_data)[1])
+test_index = dim(daily_data)[1]
+train_df =  slice_head(daily_data, n = train_index)
+test_df = slice_tail(daily_data, n = dim(daily_data)[1] - train_index)
+
+# Training the model
+
+model = prophet(train_df, daily.seasonality = FALSE)
+
+# Prediction
+future = make_future_dataframe(model, periods = dim(test_df)[1])
+prophet_forecast = predict(model, future) %>% slice_tail(., n = dim(test_df)[1])
+
+prophet_forecast
+accuracy(test_df$y, prophet_forecast$yhat)
+head(prophet_forecast$yhat)
+head(forecast(f7)$fitted)
+
+accuracy(forecast(f7, h=dim(test_df[1])), wiki_daily_split$test)
+
+accuracy(forecast(f7), wiki_daily_split$test)
+
+wiki_daily_split$test
+
+# Evaluation
+prophet_plot_components(model, prophet_forecast)
+```
+
 

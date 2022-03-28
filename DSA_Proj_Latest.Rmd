@@ -43,7 +43,7 @@ library(caret)
 daily_data = read_csv('dailydata.csv')
 
 # Changing the units
-daily_data$views = daily_data$views / 1000000
+# daily_data$views = daily_data$views / 100000
 ```
 
 
@@ -215,13 +215,40 @@ autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, a
 ```
 
 ###########################################
+SIMPLE NEURAL NET
+###########################################
+
+```{r} 
+
+# NN_model = stlm(wiki_daily_split$train, modelfunction=forecast::nnetar)
+# autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
+# accuracy(forecast(NN_model, h= 482), wiki_daily_split$test)
+wiki_1 = diff(wiki_daily_split$train)
+wiki_7 = diff(wiki_daily_split$train,7)
+wiki1nn = nnetar(wiki_1)
+forecastedgrowth1 = forecast(wiki1nn, 482)
+wiki7nn = nnetar(wiki_7)
+forecastedgrowth7 = forecast(wiki7nn, 482)
+#cbind(tail(wiki_1, length(wiki_7)), wiki_7)
+NN_model2 = nnetar(tail(wiki_daily_split$train, length(wiki_1)), xreg = wiki_1 )
+#cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
+NN_forecast = forecast(NN_model2, h = 482, xreg = tail(forecastedgrowth1$x, 482) )
+
+autoplot(wiki_daily_split$test)+autolayer(NN_forecast)
+autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
+autoplot(NN_forecast)
+accuracy(NN_forecast,wiki_daily_split$test)
+```
+
+###########################################
 DEEP LEARNING
-##########################################
+###########################################
 
 ```{r Load packages}
 library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
+library(randomForest)
 ```
 
 PREPROCESSING
@@ -295,10 +322,10 @@ Training the RNN Model
 # set a random seed for reproducability
 set.seed(123)
 
-batch_size <- 32 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
-total_epochs <- 15 # how many times we'll look @ the whole dataset while training our model
+batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
 
-model = NULL
+model <- NULL
 
 model <- keras_model_sequential() %>%   
   layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
@@ -371,41 +398,44 @@ rmse_lstm
 #         col=c("red", "blue"), lty=1,cex=0.8)
 
 ```
+Random Forest
+```{r}
+matrix_train <- data.frame(day1 = views_train_matrix[,1],
+                           day2 = views_train_matrix[,2],
+                           day3 = views_train_matrix[,3],
+                           day4 = views_train_matrix[,4],
+                           day5 = views_train_matrix[,5],
+                           day6 = views_train_matrix[,6],
+                           day7 = views_train_matrix[,7],
+                           pred = views_train_matrix[,8])
 
 
-nnetar function
-```{r} 
+matrix_test <- data.frame(day1 = views_matrix[,1],
+                           day2 = views_matrix[,2],
+                           day3 = views_matrix[,3],
+                           day4 = views_matrix[,4],
+                           day5 = views_matrix[,5],
+                           day6 = views_matrix[,6],
+                           day7 = views_matrix[,7])
 
-# NN_model = stlm(wiki_daily_split$train, modelfunction=forecast::nnetar)
-# autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
-# accuracy(forecast(NN_model, h= 482), wiki_daily_split$test)
-wiki_1 = diff(wiki_daily_split$train)
-wiki_7 = diff(wiki_daily_split$train,7)
-wiki1nn = nnetar(wiki_1)
-forecastedgrowth1 = forecast(wiki1nn, 482)
-wiki7nn = nnetar(wiki_7)
-forecastedgrowth7 = forecast(wiki7nn, 482)
-#cbind(tail(wiki_1, length(wiki_7)), wiki_7)
-NN_model2 = nnetar(tail(wiki_daily_split$train, length(wiki_1)), xreg = wiki_1 )
-#cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
-NN_forecast = forecast(NN_model2, h = 482, xreg = tail(forecastedgrowth1$x, 482) )
+rf_model <- randomForest(pred ~ ., data = matrix_train,
+                         ntree = 1000, mtry = 2, nodesize = 5, importance = T)
 
-autoplot(wiki_daily_split$test)+autolayer(NN_forecast)
-autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
-autoplot(NN_forecast)
-accuracy(NN_forecast,wiki_daily_split$test)
+
+y_pred <- predict(rf_model, matrix_test) 
+y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
+rmse_rf <- sqrt(mean((views_test-y_test)^2))
+rmse_rf
+
+x_axes = seq(1:(length(views_test)))
+plot(x_axes, views_test, type="l", col="red", lwd=2)
+lines(x_axes, y_test, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+       col=c("red", "blue"), lty=1,cex=0.8)
+
 ```
 
 
-
-
-
-
-
-
-
-
-# Sean Attempt
 Facebook Prophet attempt
 ```{r}
 # install.packages('prophet')
@@ -414,7 +444,7 @@ library('prophet')
 ```{r}
 # Pre processing for prophet model
 daily_data = read_csv('dailydata.csv')
-daily_data$views = daily_data$views / 1000000
+# daily_data$views = daily_data$views / 1000000
 inds = seq(from = as.Date("2015-07-01"), to = as.Date("2022-01-31"), by = "day")
 daily_data$ds = inds
 daily_data = rename(daily_data, y = views)

@@ -12,14 +12,15 @@ Questions:
 rm(list = ls())
 library(jsonlite)
 library(lubridate)
-library(dplyr)
 library(forecast)
 library(urca)
 library(TSstudio)
-library(keras)
-library(tidyverse)
-library(caret)
 library(prophet)
+library(randomForest)
+library(keras) # for deep learning
+library(tidyverse) # general utility functions
+library(caret) # machine learning utility functions
+library(randomForest) # for RF modelling 
 ```
 
 ### Reading CSV, Processing into TS Object, Visualisation of Data
@@ -244,15 +245,6 @@ accuracy(NN_forecast,msts_test)
 DEEP LEARNING
 ###########################################
 
-```{r Load packages}
-library(keras) # for deep learning
-library(tidyverse) # general utility functions
-library(caret) # machine learning utility functions
-install.packages(randomForest)
-library(randomForest)
-source("dataprocessing.R")
-```
-
 PREPROCESSING
 ```{r Preprocessing}
 max_len <- 7 # the number of previous examples we'll look at
@@ -447,22 +439,12 @@ future = make_future_dataframe(model, periods = dim(prophet_test)[1])
 prophet_forecast = predict(model, future) %>% slice_tail(., n = dim(prophet_test)[1])
 accuracy(prophet_test$y, prophet_forecast$yhat)
 
-# head(prophet_forecast$yhat)
-# head(forecast(f7)$fitted)
-
 # accuracy(forecast(f7, h=dim(prophet_test[1])), msts_test)
-
 # accuracy(forecast(f7), msts_test)
-
-# msts_test
 
 # Evaluation
 # prophet_plot_components(model, prophet_forecast)
-
 # autoplot(prophet_forecast$yhat)
-
-
-
 
 x_axes = seq(1:(length(prophet_forecast$yhat)))
 plot(x_axes, prophet_test$y, type="l", col="red", lwd=2)

@@ -27,5 +27,5 @@ write_csv(hourly_data, 'hourlydata.csv')
 }
 
 # Raw data
- write_csv(daily_data, 'dailydata.csv')
+write_csv(daily_data, 'dailydata.csv')
 

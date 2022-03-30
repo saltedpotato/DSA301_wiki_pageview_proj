@@ -1,5 +1,5 @@
 # Libraries
-```{r}
+```{r include=FALSE}
 library(jsonlite)
 library(lubridate)
 library(forecast)
@@ -10,8 +10,14 @@ library(randomForest)
 library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
-library(randomForest) # for RF modelling 
+library(randomForest) # for RF modelling
+source('dataprocessing.R')
 ```
+
+```{r}
+get_sequential_data(3,10)
+```
+
 
 ### Importing data
 ```{r}
@@ -20,6 +26,15 @@ daily_data = read_csv('dailydata.csv', show_col_types = FALSE)
 daily_data$views = daily_data$views / 1000000
 test_size = ceiling(dim(daily_data)[1] * 0.2)
 train_size = dim(daily_data)[1] - test_size
+
+# Putting data into TS Object
+msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
+# Creating Train and Test Set
+test_size = ceiling(dim(daily_data)[1] * 0.2)
+train_size = dim(daily_data)[1] - test_size
+msts_split <- ts_split(msts_wiki_daily, sample.out = test_size)
+msts_train = msts_split$train
+msts_test = msts_split$test
 ```
 
 
@@ -51,28 +66,6 @@ X_train <- views_train_matrix[,-ncol(views_train_matrix)]
 y_train <- views_train_matrix[,ncol(views_train_matrix)]
 ```
 
-### Training the model
-```{r}
-# set a random seed for reproducability
-set.seed(123)
-
-batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
-
-model <- NULL
-
-model <- keras_model_sequential() %>%   
-  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
-  layer_simple_rnn(units=6, activation = "relu") %>%  
-  layer_dense(units=1, activation = "linear")
- 
-model %>% compile(loss = 'mse',
-                  optimizer = 'adam',
-                  metrics = list("mean_squared_error"))
-model %>% summary()
-
-model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
-```
 
 ### Creating Test Data Set
 ```{r}
@@ -104,8 +97,60 @@ y <- views_matrix[,ncol(views_matrix)]
 # y_test <- y[-training_index]
 ```
 
-### Predicting using RNN 
+## FeedForward Neural Network
+### FeedForward NN Training
+```{r}
 
+# NN_model = stlm(msts_train, modelfunction=forecast::nnetar)
+# autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
+# accuracy(forecast(NN_model, h= 482), msts_test)
+wiki_1 = diff(msts_train)
+wiki_7 = diff(msts_train,7)
+wiki1nn = nnetar(wiki_1)
+forecastedgrowth1 = forecast(wiki1nn, 482)
+wiki7nn = nnetar(wiki_7)
+forecastedgrowth7 = forecast(wiki7nn, 482)
+#cbind(tail(wiki_1, length(wiki_7)), wiki_7)
+NN_model2 = nnetar(tail(msts_train, length(wiki_1)), xreg = wiki_1 )
+#cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
+
+```
+
+### FeedForward NN Testing
+```{r}
+NN_forecast = forecast(NN_model2, h = 482, xreg = tail(forecastedgrowth1$x, 482) )
+autoplot(msts_test)+autolayer(NN_forecast)
+autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
+autoplot(NN_forecast)
+accuracy(NN_forecast,msts_test)
+```
+
+## RNN
+### RNN Training
+```{r}
+# set a random seed for reproducability
+set.seed(123)
+
+batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+
+model <- NULL
+
+model <- keras_model_sequential() %>%   
+  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
+  layer_simple_rnn(units=6, activation = "relu") %>%  
+  layer_dense(units=1, activation = "linear")
+ 
+model %>% compile(loss = 'mse',
+                  optimizer = 'adam',
+                  metrics = list("mean_squared_error"))
+model %>% summary()
+
+model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
+```
+
+
+### RNN Testing
 ```{r}
 y_pred = model %>% predict(X)
 y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
@@ -119,4 +164,54 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 rmse_rnn <- sqrt(mean((views_test-y_test)^2))
 rmse_rnn
 ```
+
+## LSTM
+### LSTM Model Training
+```{r}
+# set a random seed for reproducability
+set.seed(123)
+
+batch_size <- 16 # number of sequences to look at at one time during training
+total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+
+model <- NULL
+
+
+model <-  keras_model_sequential() %>%   
+  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
+  layer_lstm(units=64, activation = "relu") %>%
+  layer_dense(units=20, activation = "relu") %>%
+  layer_dense(units=1, activation = "linear")
+ 
+model %>% compile(loss = 'mse',
+                  optimizer = 'adam',
+                  metrics = list("mean_squared_error"))
+model %>% summary()
+
+model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
+
+#lstm_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
+
+y_pred = model %>% predict(X)
+y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
+x_axes = seq(1:(length(views_test)))
+plot(x_axes, views_test, type="l", col="red", lwd=2)
+lines(x_axes, y_test, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+
+rmse_lstm <- sqrt(mean((views_test-y_test)^2))
+rmse_lstm
+
+# rmse_lstm <- sqrt(lstm_outcome[2])
+# rmse_lstm
+# y_pred = model %>% predict(X_test)
+# x_axes = seq(1:length(y_pred))
+# plot(x_axes, y_test, type="l", col="red", lwd=2)
+# lines(x_axes, y_pred, col="blue",lwd=2)
+# legend("topleft", legend=c("y-original", "y-predicted"),
+#         col=c("red", "blue"), lty=1,cex=0.8)
+
+```
+
 

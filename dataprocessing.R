@@ -29,3 +29,8 @@ write_csv(hourly_data, 'hourlydata.csv')
 # Raw data
 write_csv(daily_data, 'dailydata.csv')
 
+
+# Processing Data for Recurrent Neural Networks
+get_sequential_data = function (input_size = 7, dataset = NULL) {
+  print("SHIFT THE NN Processing HERE LATER, can keep the code clean")
+}

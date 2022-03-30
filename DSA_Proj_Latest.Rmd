@@ -32,17 +32,17 @@ daily_data$views = daily_data$views / 1000000
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
 # msts_wiki_daily <- daily_data$views %>% msts(seasonal.periods = c(7, 365), start = decimal_date(as.Date("2015-07-01")))
-prophet_data = rename(daily_data, y = views, ds = date)
-
 # Creating Train and Test Set
 test_size = ceiling(dim(daily_data)[1] * 0.2)
 train_size = dim(daily_data)[1] - test_size
-prophet_train = slice_head(prophet_data, n = train_size)
-prophet_test = slice_tail(prophet_data, n = test_size)
-
 msts_split <- ts_split(msts_wiki_daily, sample.out = test_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
+
+prophet_data = rename(daily_data, y = views, ds = date)
+prophet_train = slice_head(prophet_data, n = train_size)
+prophet_test = slice_tail(prophet_data, n = test_size)
+
 ```
 ###Visualising STL decomposition
 ```{r}
@@ -215,184 +215,7 @@ autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, a
                       breaks=c("Original","Forecast"))
 ```
 
-###########################################
-SIMPLE NEURAL NET
-###########################################
-
-```{r} 
-
-# NN_model = stlm(msts_train, modelfunction=forecast::nnetar)
-# autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
-# accuracy(forecast(NN_model, h= 482), msts_test)
-wiki_1 = diff(msts_train)
-wiki_7 = diff(msts_train,7)
-wiki1nn = nnetar(wiki_1)
-forecastedgrowth1 = forecast(wiki1nn, 482)
-wiki7nn = nnetar(wiki_7)
-forecastedgrowth7 = forecast(wiki7nn, 482)
-#cbind(tail(wiki_1, length(wiki_7)), wiki_7)
-NN_model2 = nnetar(tail(msts_train, length(wiki_1)), xreg = wiki_1 )
-#cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
-NN_forecast = forecast(NN_model2, h = 482, xreg = tail(forecastedgrowth1$x, 482) )
-
-autoplot(msts_test)+autolayer(NN_forecast)
-autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
-autoplot(NN_forecast)
-accuracy(NN_forecast,msts_test)
-```
-
-###########################################
-DEEP LEARNING
-###########################################
-
-PREPROCESSING
-```{r Preprocessing}
-max_len <- 7 # the number of previous examples we'll look at
-
-views <- daily_data$views
-
-views_train <- views[1:floor(length(views) * 0.8)]
-
-views_test <- views[ceiling(length(views) * 0.8):length(views)]
-  
-# scale_factors <- c(mean(views_train), sd(views_train))
-# 
-# scaled_train <- (views_train - scale_factors[1]) / scale_factors[2] #normalise data
-# 
-# scaled_train <- as.matrix(scaled_train)
- 
-# Cut the text in overlapping sample sequences of max_len characters
-
-# get a list of start indexes for our (overlapping) chunks
-start_indexes <- seq(1, length(views_train) - (max_len + 1), by = 1)
-
-# create an empty matrix to store our data in
-views_train_matrix <- matrix(nrow = length(start_indexes), ncol = max_len + 1)
-
-# fill our matrix with the overlapping slices of our dataset
-for (i in 1:length(start_indexes)){
-  views_train_matrix[i,] <- views_train[start_indexes[i]:(start_indexes[i] + max_len)]
-}
-
-# remove na's if you have them
-if(anyNA(views_train_matrix)){
-    views_train_matrix <- na.omit(views_train_matrix)
-}
-
-X_train <- views_train_matrix[,-ncol(views_train_matrix)]
-y_train <- views_train_matrix[,ncol(views_train_matrix)]
-
-
-start_indexes_all <- seq(1, length(views) - (max_len + 1), by = 1)
-
-# create an empty matrix to store our data in
-views_matrix <- matrix(nrow = length(start_indexes_all), ncol = max_len + 1)
-
-# fill our matrix with the overlapping slices of our dataset
-for (i in 1:length(start_indexes_all)){
-  views_matrix[i,] <- views[start_indexes_all[i]:(start_indexes_all[i] + max_len)]
-}
-
-# remove na's if you have them
-if(anyNA(views_matrix)){
-    views_matrix <- na.omit(views_matrix)
-}
-
-X <- views_matrix[,-ncol(views_matrix)]
-y <- views_matrix[,ncol(views_matrix)]
-# training_index <- seq(1,floor(0.8*length(views) - 8))
-# 
-# # training data
-# X_train <- array(X[training_index,], dim = c(length(training_index), max_len, 1))
-# y_train <- y[training_index]
-# 
-# # testing data
-# X_test <- array(X[-training_index,], dim = c(length(y) - length(training_index), max_len, 1))
-# y_test <- y[-training_index]
-```
-
-Training the RNN Model
-```{r RNN}
-# set a random seed for reproducability
-set.seed(123)
-
-batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
-
-model <- NULL
-
-model <- keras_model_sequential() %>%   
-  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
-  layer_simple_rnn(units=6, activation = "relu") %>%  
-  layer_dense(units=1, activation = "linear")
- 
-model %>% compile(loss = 'mse',
-                  optimizer = 'adam',
-                  metrics = list("mean_squared_error"))
-model %>% summary()
-
-model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
-
-y_pred = model %>% predict(X)
-y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
-x_axes = seq(1:(length(views_test)))
-plot(x_axes, views_test, type="l", col="red", lwd=2)
-lines(x_axes, y_test, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-
-rmse_rnn <- sqrt(mean((views_test-y_test)^2))
-rmse_rnn
-```
-
-```{r LSTM}
-# set a random seed for reproducability
-set.seed(123)
-
-batch_size <- 16 # number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
-
-model <- NULL
-
-
-model <-  keras_model_sequential() %>%   
-  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
-  layer_lstm(units=64, activation = "relu") %>%
-  layer_dense(units=20, activation = "relu") %>%
-  layer_dense(units=1, activation = "linear")
- 
-model %>% compile(loss = 'mse',
-                  optimizer = 'adam',
-                  metrics = list("mean_squared_error"))
-model %>% summary()
-
-model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
-
-#lstm_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
-
-y_pred = model %>% predict(X)
-y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
-x_axes = seq(1:(length(views_test)))
-plot(x_axes, views_test, type="l", col="red", lwd=2)
-lines(x_axes, y_test, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-rmse_lstm <- sqrt(mean((views_test-y_test)^2))
-rmse_lstm
-
-# rmse_lstm <- sqrt(lstm_outcome[2])
-# rmse_lstm
-# y_pred = model %>% predict(X_test)
-# x_axes = seq(1:length(y_pred))
-# plot(x_axes, y_test, type="l", col="red", lwd=2)
-# lines(x_axes, y_pred, col="blue",lwd=2)
-# legend("topleft", legend=c("y-original", "y-predicted"),
-#         col=c("red", "blue"), lty=1,cex=0.8)
-
-```
-Random Forest
+## Random Forest
 ```{r}
 matrix_train <- data.frame(day1 = views_train_matrix[,1],
                            day2 = views_train_matrix[,2],
@@ -430,7 +253,7 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 ```
 
 
-Facebook Prophet attempt
+## Facebook Prophet
 ```{r}
 model = prophet(prophet_train, daily.seasonality = FALSE)
 

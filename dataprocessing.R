@@ -41,3 +41,18 @@ write_csv(test_df, "testdf.csv")
 get_sequential_data = function (input_size = 7, dataset = NULL) {
   print("SHIFT THE NN Processing HERE LATER, can keep the code clean")
 }
+
+get_train_df = function (train_val_df) {
+  train_size = length(train_val_df$date[year(daily_data$date) < 2021])
+  val_size = dim(train_val_df)[1] - train_size
+  train_df = slice_head(train_val_df, n = train_size)
+  
+  return (train_df)
+}
+
+get_val_df = function (train_val_df) {
+  train_size = length(train_val_df$date[year(daily_data$date) < 2021])
+  val_size = dim(train_val_df)[1] - train_size
+  val_df = slice_tail(train_val_df, n = val_size)
+  return (val_df)
+}

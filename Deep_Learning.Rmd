@@ -11,7 +11,7 @@ library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
 library(randomForest) # for RF modelling
-source('dataprocessing.R')
+#source('dataprocessing.R')
 ```
 
 ```{r}
@@ -22,68 +22,17 @@ source('dataprocessing.R')
 ### Importing data
 ```{r}
 rm(list = ls())
-daily_data = read_csv('dailydata.csv', show_col_types = FALSE)
-views = daily_data$views / 1000000
-test_size = ceiling(dim(daily_data)[1] * 0.2)
-train_size = dim(daily_data)[1] - test_size
+daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
 # Creating Train and Test Set
-test_size = ceiling(dim(daily_data)[1] * 0.2)
-train_size = dim(daily_data)[1] - test_size
-msts_split <- ts_split(msts_wiki_daily, sample.out = test_size)
+train_size = length(daily_data$date[year(daily_data$date) < 2021])
+val_size = dim(daily_data)[1] - train_size
+
+msts_split <- ts_split(msts_wiki_daily, sample.out = val_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
-```
-
-
-### Creating Training Data Set
-```{r}
-max_len <- 365 # the number of previous examples we'll look at
-views_train <- views[1:(length(views)-365+1)]
-views_test <- views[(length(views)-365+1):length(views)]
-
-normalization = c(mean(views_train), sd(views_train))
-
-views_norm <- (views - normalization[1]) / normalization[2]
-train_norm = views_norm[1:(length(views)-365+1)]
-test_norm = views_norm[(length(views)-365+1):length(views)]
-
-# Cut the text in overlapping sample sequences of max_len characters
-# get a list of start indexes for our (overlapping) chunks
-start_indexes_x <- seq(1, (length(views_norm) - max_len - max_len + 1), by = 1)
-start_indexes_y <- seq(1+max_len, length(views_norm) - max_len + 1, by = 1)
-
-start_indexes_test <- seq((length(views_norm) - max_len - max_len + 1), length(views_norm) - max_len , by = 1)
-
-# create an empty matrix to store our data in
-views_train_matrix_x <- matrix(nrow = length(start_indexes_x), ncol = max_len)
-views_train_matrix_y <- matrix(nrow = length(start_indexes_y), ncol = max_len)
-views_test_matrix <- matrix(nrow = length(start_indexes_test), ncol = max_len)
-
-# fill our matrix with the overlapping slices of our dataset
-for (i in 1:length(start_indexes_x)){
-  views_train_matrix_x[i,] <- views_norm[start_indexes_x[i]:(start_indexes_x[i] + max_len-1)]
-}
-
-for (i in 1:length(start_indexes_y)){
-  views_train_matrix_y[i,] <- views_norm[start_indexes_y[i]:(start_indexes_y[i] + max_len-1)]
-}
-
-for (i in 1:length(start_indexes_test)){
-  views_test_matrix[i,] <- views_norm[start_indexes_test[i]:(start_indexes_test[i] + max_len-1)]
-}
-# remove na's if you have them
-if(anyNA(views_train_matrix_x)){
-    views_train_matrix_x <- na.omit(views_train_matrix_x)
-}
-if(anyNA(views_train_matrix_y)){
-    views_train_matrix_y <- na.omit(views_train_matrix_y)
-}
-if(anyNA(views_test_matrix)){
-    views_test_matrix <- na.omit(views_test_matrix)
-}
 ```
 
 
@@ -98,9 +47,9 @@ if(anyNA(views_test_matrix)){
 wiki_1 = diff(msts_train)
 wiki_7 = diff(msts_train,7)
 wiki1nn = nnetar(wiki_1)
-forecastedgrowth1 = forecast(wiki1nn, 482)
+forecastedgrowth1 = forecast(wiki1nn, val_size)
 wiki7nn = nnetar(wiki_7)
-forecastedgrowth7 = forecast(wiki7nn, 482)
+forecastedgrowth7 = forecast(wiki7nn, val_size)
 #cbind(tail(wiki_1, length(wiki_7)), wiki_7)
 NN_model2 = nnetar(tail(msts_train, length(wiki_1)), xreg = wiki_1 )
 #cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
@@ -109,7 +58,7 @@ NN_model2 = nnetar(tail(msts_train, length(wiki_1)), xreg = wiki_1 )
 
 ### FeedForward NN Testing
 ```{r}
-NN_forecast = forecast(NN_model2, h = 482, xreg = tail(forecastedgrowth1$x, 482) )
+NN_forecast = forecast(NN_model2, h = val_size, xreg = tail(forecastedgrowth1$x, val_size) )
 autoplot(msts_test)+autolayer(NN_forecast)
 autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
 autoplot(NN_forecast)
@@ -119,83 +68,83 @@ accuracy(NN_forecast,msts_test)
 ## RNN
 ### RNN Training
 ```{r}
-# set a random seed for reproducability
-set.seed(123)
-
-batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
-
-model <- NULL
-
-model <- keras_model_sequential() %>%   
-  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
-  layer_simple_rnn(units=64, activation = "relu") %>%  
-  layer_dense(units=20, activation="relu") %>%
-  layer_dense(units=1, activation = "linear")
- 
-model %>% compile(loss = 'mse',
-                  optimizer = 'adam',
-                  metrics = list("mean_squared_error"))
-model %>% summary()
-
-model %>% fit(views_train_matrix_x,views_train_matrix_y, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.3, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)))
+# # set a random seed for reproducability
+# set.seed(123)
+# 
+# batch_size <- 16 # Size of batch for mini-batch gradient descent. number of sequences to look at at one time during training
+# total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+# 
+# model <- NULL
+# 
+# model <- keras_model_sequential() %>%   
+#   layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
+#   layer_simple_rnn(units=64, activation = "relu") %>%  
+#   layer_dense(units=20, activation="relu") %>%
+#   layer_dense(units=1, activation = "linear")
+#  
+# model %>% compile(loss = 'mse',
+#                   optimizer = 'adam',
+#                   metrics = list("mean_squared_error"))
+# model %>% summary()
+# 
+# model %>% fit(views_train_matrix_x,views_train_matrix_y, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.3, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)))
 ```
 
 
 ### RNN Testing
 ```{r}
-y_pred = model %>% predict(views_test_matrix)
-#y_pred = y_pred * normalization[2] + normalization[1]
-#y_test = y_pred[(length(y_pred)-length(views_train_matrix_test)+1):length(y_pred)]
-y_test <- views[(length(views)-365+1):length(views)]
-x_axes = seq(1:(length(y_pred)))
-plot(x_axes, y_test, type="l", col="red", lwd=2)
-lines(x_axes, y_pred, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-
-rmse_rnn <- sqrt(mean((y_test-y_pred)^2))
-rmse_rnn
+# y_pred = model %>% predict(views_test_matrix)
+# #y_pred = y_pred * normalization[2] + normalization[1]
+# #y_test = y_pred[(length(y_pred)-length(views_train_matrix_test)+1):length(y_pred)]
+# y_test <- views[(length(views)-365+1):length(views)]
+# x_axes = seq(1:(length(y_pred)))
+# plot(x_axes, y_test, type="l", col="red", lwd=2)
+# lines(x_axes, y_pred, col="blue",lwd=2)
+# legend("topleft", legend=c("y-original", "y-predicted"),
+#         col=c("red", "blue"), lty=1,cex=0.8)
+# 
+# 
+# rmse_rnn <- sqrt(mean((y_test-y_pred)^2))
+# rmse_rnn
 ```
 
 ## LSTM
 ### LSTM Model Training
 ```{r}
 # set a random seed for reproducability
-set.seed(123)
-
-batch_size <- 16 # number of sequences to look at at one time during training
-total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
-
-model <- NULL
-
-
-model <-  keras_model_sequential() %>%   
-  layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
-  layer_lstm(units=64, activation = "relu") %>%
-  layer_dense(units=20, activation = "relu") %>%
-  layer_dense(units=1, activation = "linear")
- 
-model %>% compile(loss = 'mse',
-                  optimizer = 'adam',
-                  metrics = list("mean_squared_error"))x
-model %>% summary()
-
-model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
-
-#lstm_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
-
-y_pred = model %>% predict(X)
-y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
-x_axes = seq(1:(length(views_test)))
-plot(x_axes, views_test, type="l", col="red", lwd=2)
-lines(x_axes, y_test, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-rmse_lstm <- sqrt(mean((views_test-y_test)^2))
-rmse_lstm
+# set.seed(123)
+# 
+# batch_size <- 16 # number of sequences to look at at one time during training
+# total_epochs <- 50 # how many times we'll look @ the whole dataset while training our model
+# 
+# model <- NULL
+# 
+# 
+# model <-  keras_model_sequential() %>%   
+#   layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%  
+#   layer_lstm(units=64, activation = "relu") %>%
+#   layer_dense(units=20, activation = "relu") %>%
+#   layer_dense(units=1, activation = "linear")
+#  
+# model %>% compile(loss = 'mse',
+#                   optimizer = 'adam',
+#                   metrics = list("mean_squared_error"))x
+# model %>% summary()
+# 
+# model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
+# 
+# #lstm_outcome <- model %>% evaluate(X_test, y_test, verbose = 0)
+# 
+# y_pred = model %>% predict(X)
+# y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
+# x_axes = seq(1:(length(views_test)))
+# plot(x_axes, views_test, type="l", col="red", lwd=2)
+# lines(x_axes, y_test, col="blue",lwd=2)
+# legend("topleft", legend=c("y-original", "y-predicted"),
+#         col=c("red", "blue"), lty=1,cex=0.8)
+# 
+# rmse_lstm <- sqrt(mean((views_test-y_test)^2))
+# rmse_lstm
 
 # rmse_lstm <- sqrt(lstm_outcome[2])
 # rmse_lstm
@@ -239,28 +188,56 @@ lstmforecast = function(yvariable, forecasthorizon){
     time_distributed(keras::layer_dense(units = 1))
   
   lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')     
-  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)) )    
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, verbose = 1, restore_best_weights = T)    
   lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
   
-  return(lstm_forecast)   
+  return(list(model = lstm_model, values = lstm_forecast))  
 }
 
 
 
 ##EDIT THESE SETTINGS
-var = msts_split$train
-forecasthorizon = 365
+var = msts_wiki_daily
+forecasthorizon = val_size
 
 ##DO NOT REALLY NEED TO EDIT THIS PART######
 forecast = lstmforecast(var,forecasthorizon)
-forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast))
+forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast$values))
 autoplot(forecastedseries) + autolayer(ts(var))
 
-y_pred <- forecastedseries[(length(forecastedseries) - 482 + 1): length(forecastedseries)]
-y_test <- var[(length(var) - 482 + 1):length(var)]
+y_pred <- forecast$values
+y_test <- var[(length(var) - val_size + 1):length(var)]
 sqrt(mean((y_test - y_pred)^2))
-save_model_hdf5()
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+
+forecast$model %>% save_model_hdf5("LSTM_Rachel_v1.h5")
+
+
+
+
+
+# test_data = read_csv('testdf.csv', show_col_types = FALSE)
+# test_views = test_data$views
+# normalization = c(mean(test_views), sd(test_views))
+# test_views_scaled = (test_views - normalization[1]) / normalization[2]
+# test_pred_arr = array(data = test_views_scaled,  dim = c( 1, forecasthorizon,  1 ) )
+# 
+# testf = forecast$model%>% predict(test_pred_arr, batch_size = 1) %>%.[, , 1]
+# testf = testf * normalization[2] + normalization[1]
+# 
+# sqrt(mean((test_views - testf)^2))
+# 
+# x_axes2 = seq(1:length(testf))
+# plot(x_axes2, test_views, type="l", col="red", lwd=2)
+# lines(x_axes2, testf, col="blue",lwd=2)
+# legend("topleft", legend=c("y-original", "y-predicted"),
+#         col=c("red", "blue"), lty=1,cex=0.8)
 ```
 
 

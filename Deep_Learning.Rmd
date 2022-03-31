@@ -41,36 +41,38 @@ msts_test = msts_split$test
 ### Creating Training Data Set
 ```{r}
 max_len <- 365 # the number of previous examples we'll look at
+views_train <- views[1:(length(views)-365+1)]
+views_test <- views[(length(views)-365+1):length(views)]
 
+normalization = c(mean(views_train), sd(views_train))
 
-normalization = c(mean(views[(length(views)-365+1):length(views)]), sd(views[(length(views)-365+1):length(views)]))
-  #train_norm = (views - normalization[1]) / normalization[2]
-train_norm = views
-train_norm = as.matrix(train_norm)
+views_norm <- (views - normalization[1]) / normalization[2]
+train_norm = views_norm[1:(length(views)-365+1)]
+test_norm = views_norm[(length(views)-365+1):length(views)]
 
 # Cut the text in overlapping sample sequences of max_len characters
 # get a list of start indexes for our (overlapping) chunks
-start_indexes_x <- seq(1, (length(train_norm) - max_len - max_len + 1), by = 1)
-start_indexes_y <- seq(1+max_len, length(train_norm) - max_len + 1, by = 1)
-start_indexes_test <- seq((length(train_norm) - max_len - max_len + 1), length(train_norm) - max_len , by = 1)
+start_indexes_x <- seq(1, (length(views_norm) - max_len - max_len + 1), by = 1)
+start_indexes_y <- seq(1+max_len, length(views_norm) - max_len + 1, by = 1)
+
+start_indexes_test <- seq((length(views_norm) - max_len - max_len + 1), length(views_norm) - max_len , by = 1)
 
 # create an empty matrix to store our data in
 views_train_matrix_x <- matrix(nrow = length(start_indexes_x), ncol = max_len)
 views_train_matrix_y <- matrix(nrow = length(start_indexes_y), ncol = max_len)
-views_train_matrix_test <- matrix(nrow = length(start_indexes_test), ncol = max_len)
+views_test_matrix <- matrix(nrow = length(start_indexes_test), ncol = max_len)
 
-views_train_matrix_test = (views_train_matrix_test - normalization[1]) / normalization[2]
 # fill our matrix with the overlapping slices of our dataset
 for (i in 1:length(start_indexes_x)){
-  views_train_matrix_x[i,] <- train_norm[start_indexes_x[i]:(start_indexes_x[i] + max_len-1)]
+  views_train_matrix_x[i,] <- views_norm[start_indexes_x[i]:(start_indexes_x[i] + max_len-1)]
 }
 
 for (i in 1:length(start_indexes_y)){
-  views_train_matrix_y[i,] <- train_norm[start_indexes_y[i]:(start_indexes_y[i] + max_len-1)]
+  views_train_matrix_y[i,] <- views_norm[start_indexes_y[i]:(start_indexes_y[i] + max_len-1)]
 }
 
 for (i in 1:length(start_indexes_test)){
-  views_train_matrix_test[i,] <- train_norm[start_indexes_test[i]:(start_indexes_test[i] + max_len-1)]
+  views_test_matrix[i,] <- views_norm[start_indexes_test[i]:(start_indexes_test[i] + max_len-1)]
 }
 # remove na's if you have them
 if(anyNA(views_train_matrix_x)){
@@ -79,7 +81,9 @@ if(anyNA(views_train_matrix_x)){
 if(anyNA(views_train_matrix_y)){
     views_train_matrix_y <- na.omit(views_train_matrix_y)
 }
-
+if(anyNA(views_test_matrix)){
+    views_test_matrix <- na.omit(views_test_matrix)
+}
 ```
 
 
@@ -125,8 +129,8 @@ model <- NULL
 
 model <- keras_model_sequential() %>%   
   layer_dense(units=max_len, input_shape=c(max_len, 1), activation="relu") %>%
-  layer_simple_rnn(units=6, activation = "relu") %>%  
-  #layer_dense(units=20, activation="relu") %>%
+  layer_simple_rnn(units=64, activation = "relu") %>%  
+  layer_dense(units=20, activation="relu") %>%
   layer_dense(units=1, activation = "linear")
  
 model %>% compile(loss = 'mse',
@@ -134,23 +138,24 @@ model %>% compile(loss = 'mse',
                   metrics = list("mean_squared_error"))
 model %>% summary()
 
-model %>% fit(views_train_matrix_x,views_train_matrix_y, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
+model %>% fit(views_train_matrix_x,views_train_matrix_y, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.3, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)))
 ```
 
 
 ### RNN Testing
 ```{r}
-y_pred = model %>% predict(views_train_matrix_test)
+y_pred = model %>% predict(views_test_matrix)
 #y_pred = y_pred * normalization[2] + normalization[1]
 #y_test = y_pred[(length(y_pred)-length(views_train_matrix_test)+1):length(y_pred)]
+y_test <- views[(length(views)-365+1):length(views)]
 x_axes = seq(1:(length(y_pred)))
-plot(x_axes, views[(length(views)-365+1):length(views)], type="l", col="red", lwd=2)
+plot(x_axes, y_test, type="l", col="red", lwd=2)
 lines(x_axes, y_pred, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"),
         col=c("red", "blue"), lty=1,cex=0.8)
 
 
-rmse_rnn <- sqrt(mean((views[(length(views)-365+1):length(views)]-y_pred)^2))
+rmse_rnn <- sqrt(mean((y_test-y_pred)^2))
 rmse_rnn
 ```
 

@@ -25,16 +25,22 @@ library(randomForest) # for RF modelling
 
 ### Reading CSV, Processing into TS Object, Visualisation of Data
 ```{r}
-rm(list = ls())
-daily_data = read_csv('dailydata.csv', show_col_types = FALSE)
-daily_data$views = daily_data$views / 1000000
+# daily_data = read_csv('dailydata.csv', show_col_types = FALSE)
+# daily_data$views = daily_data$views / 1000000
+# daily_data = filter(daily_data, date < as.Date("2022-1-1"))
+# slice_head(daily_data, n = train_size) %>% write_csv(., "traindf.csv")
+# slice_tail(daily_data, n = test_size) %>% write_csv(., "testdf.csv")
+# write_csv(daily_data, "finalfulldf.csv")
+
+daily_data = read_csv('finalfulldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
-# msts_wiki_daily <- daily_data$views %>% msts(seasonal.periods = c(7, 365), start = decimal_date(as.Date("2015-07-01")))
+
 # Creating Train and Test Set
-test_size = ceiling(dim(daily_data)[1] * 0.2)
-train_size = dim(daily_data)[1] - test_size
+train_size = length(daily_data$date[year(daily_data$date) < 2021])
+test_size = length(daily_data$date[year(daily_data$date) == 2021])
+
 msts_split <- ts_split(msts_wiki_daily, sample.out = test_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
@@ -42,13 +48,12 @@ msts_test = msts_split$test
 prophet_data = rename(daily_data, y = views, ds = date)
 prophet_train = slice_head(prophet_data, n = train_size)
 prophet_test = slice_tail(prophet_data, n = test_size)
-
 ```
+
 ###Visualising STL decomposition
 ```{r}
 daily_train_decomp = mstl(msts_train)
 seasadj_wiki <- seasadj(daily_train_decomp)
-# wiki_daily_decomp_train <- mstl(msts_train)
 autoplot(daily_train_decomp)
 # Both the yearly seasonal pattern and the weekly seasonal pattern seem significant (in terms of impact on overall data), and therefore we do not rule any of them out at the moment.
 ```

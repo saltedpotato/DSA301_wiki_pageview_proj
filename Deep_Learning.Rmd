@@ -15,7 +15,7 @@ source('dataprocessing.R')
 ```
 
 ```{r}
-get_sequential_data(3,10)
+# get_sequential_data(3,10)
 ```
 
 
@@ -65,7 +65,6 @@ if(anyNA(views_train_matrix)){
 X_train <- views_train_matrix[,-ncol(views_train_matrix)]
 y_train <- views_train_matrix[,ncol(views_train_matrix)]
 ```
-
 
 ### Creating Test Data Set
 ```{r}
@@ -212,6 +211,56 @@ rmse_lstm
 # legend("topleft", legend=c("y-original", "y-predicted"),
 #         col=c("red", "blue"), lty=1,cex=0.8)
 
+```
+
+## Prof's Code
+```{r}
+lstmforecast = function(yvariable, forecasthorizon){
+  normalization = c(mean(yvariable), sd(yvariable))
+  train_norm = (yvariable - normalization[1]) / normalization[2]
+  train_norm = as.matrix(train_norm)
+  
+  x_train_data = t(sapply(1:(length(train_norm) - forecasthorizon - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1), 1] ))
+  x_train_arr = array(data = as.numeric(unlist(x_train_data)), dim = c( nrow(x_train_data), forecasthorizon,   1   )  )
+  y_train_data = t(sapply( (1 + forecasthorizon):(length(train_norm) - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1)] ))
+  y_train_arr = array( data = as.numeric(unlist(y_train_data)),  dim = c(  nrow(y_train_data),  forecasthorizon,   1    ) )
+  x_test = yvariable[(nrow(train_norm) - 2*forecasthorizon + 1):(nrow(train_norm) - forecasthorizon + 1)]
+  x_test_scaled = (x_test - normalization[1]) / normalization[2]
+  x_pred_arr = array(data = x_test_scaled,  dim = c( 1, forecasthorizon,  1 ) )
+  
+  #####LSTM SETTINGS COPY PASTED FROM DOCS WITHOUT MODIFICATION###########
+  lstm_model = keras_model_sequential()
+  lstm_model %>%
+    layer_lstm(units = 50, # size of the layer
+               batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    # fraction of the units to drop for the linear transformation of the inputs
+    layer_dropout(rate = 0.5) %>%
+    layer_lstm(units = 50,
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    layer_dropout(rate = 0.5) %>%
+    time_distributed(keras::layer_dense(units = 1))
+  
+  lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')     
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20, verbose = 0,  shuffle = FALSE )    
+  lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
+  lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
+  
+  return(lstm_forecast)   
+}
+
+
+
+##EDIT THESE SETTINGS
+var = msts_split$train
+forecasthorizon = 482
+
+##DO NOT REALLY NEED TO EDIT THIS PART######
+forecast = lstmforecast(var,forecasthorizon)
+forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast))
+autoplot(forecastedseries) + autolayer(ts(var))
 ```
 
 

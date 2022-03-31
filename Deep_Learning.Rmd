@@ -227,7 +227,7 @@ lstmforecast = function(yvariable, forecasthorizon){
   lstm_model = keras_model_sequential()
   lstm_model %>%
     layer_lstm(units = 50, # size of the layer
-               batch_input_shape = c(16, forecasthorizon, 1), # batch size, timesteps, features
+               batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
                return_sequences = TRUE,
                stateful = TRUE) %>%
     # fraction of the units to drop for the linear transformation of the inputs
@@ -236,11 +236,11 @@ lstmforecast = function(yvariable, forecasthorizon){
                return_sequences = TRUE,
                stateful = TRUE) %>%
     layer_dropout(rate = 0.5) %>%
-    time_distributed(keras::layer_dense(units = forecasthorizon))
+    time_distributed(keras::layer_dense(units = 1))
   
   lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')     
-  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 16, epochs = 20,shuffle = FALSE, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)) )    
-  lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 16) %>%.[, , 1]  #LINE X
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)) )    
+  lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
   
   return(lstm_forecast)   
@@ -256,6 +256,11 @@ forecasthorizon = 482
 forecast = lstmforecast(var,forecasthorizon)
 forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast))
 autoplot(forecastedseries) + autolayer(ts(var))
+
+y_pred <- forecastedseries[(length(forecastedseries) - 482 + 1): length(forecastedseries)]
+y_test <- var[(length(var) - 482 + 1):length(var)]
+sqrt(mean((y_test - y_pred)^2))
+save_model_hdf5()
 ```
 
 

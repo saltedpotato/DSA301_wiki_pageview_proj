@@ -179,7 +179,7 @@ model <-  keras_model_sequential() %>%
  
 model %>% compile(loss = 'mse',
                   optimizer = 'adam',
-                  metrics = list("mean_squared_error"))
+                  metrics = list("mean_squared_error"))x
 model %>% summary()
 
 model %>% fit(X_train,y_train, epochs=total_epochs, batch_size= batch_size, shuffle = FALSE,validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 0, restore_best_weights = T)))
@@ -249,8 +249,8 @@ lstmforecast = function(yvariable, forecasthorizon){
 
 
 ##EDIT THESE SETTINGS
-var = msts_wiki_daily
-forecasthorizon = 482
+var = msts_split$train
+forecasthorizon = 365
 
 ##DO NOT REALLY NEED TO EDIT THIS PART######
 forecast = lstmforecast(var,forecasthorizon)

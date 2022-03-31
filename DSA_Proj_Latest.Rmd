@@ -220,6 +220,35 @@ autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, a
                       breaks=c("Original","Forecast"))
 ```
 
+```{r}
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f0), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f3), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f6), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f7), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))
+```
+
 ## Random Forest
 ```{r}
 matrix_train <- data.frame(day1 = views_train_matrix[,1],

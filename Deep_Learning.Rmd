@@ -23,6 +23,9 @@ library(randomForest) # for RF modelling
 ```{r}
 rm(list = ls())
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
+views = daily_data$views / 1000000
+test_size = ceiling(dim(daily_data)[1] * 0.2)
+train_size = dim(daily_data)[1] - test_size
 
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
@@ -179,6 +182,7 @@ lstmforecast = function(yvariable, forecasthorizon){
                batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
                return_sequences = TRUE,
                stateful = TRUE) %>%
+    # layer_dense(units=20, activation = "relu") %>%
     # fraction of the units to drop for the linear transformation of the inputs
     layer_dropout(rate = 0.5) %>%
     layer_lstm(units = 50,
@@ -187,8 +191,8 @@ lstmforecast = function(yvariable, forecasthorizon){
     layer_dropout(rate = 0.5) %>%
     time_distributed(keras::layer_dense(units = 1))
   
-  lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')     
-  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, verbose = 1, restore_best_weights = T)    
+  lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)) )    
   lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
   
@@ -243,4 +247,64 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 
 ```
 
+```{r}
+rnnforecast = function(yvariable, forecasthorizon){
+  normalization = c(mean(yvariable), sd(yvariable))
+  train_norm = (yvariable - normalization[1]) / normalization[2]
+  train_norm = as.matrix(train_norm)
+  
+  x_train_data = t(sapply(1:(length(train_norm) - forecasthorizon - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1), 1] ))
+  x_train_arr = array(data = as.numeric(unlist(x_train_data)), dim = c( nrow(x_train_data), forecasthorizon,   1   )  )
+  y_train_data = t(sapply( (1 + forecasthorizon):(length(train_norm) - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1)] ))
+  y_train_arr = array( data = as.numeric(unlist(y_train_data)),  dim = c(  nrow(y_train_data),  forecasthorizon,   1    ) )
+  x_test = yvariable[(nrow(train_norm) - 2*forecasthorizon + 1):(nrow(train_norm) - forecasthorizon + 1)]
+  x_test_scaled = (x_test - normalization[1]) / normalization[2]
+  x_pred_arr = array(data = x_test_scaled,  dim = c( 1, forecasthorizon,  1 ) )
+  
+  #####LSTM SETTINGS COPY PASTED FROM DOCS WITHOUT MODIFICATION###########
+  rnn_model = keras_model_sequential()
+  rnn_model %>%
+    layer_simple_rnn(units = 64, # size of the layer
+               batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    layer_dense(units=20, activation = "relu") %>%
+    # fraction of the units to drop for the linear transformation of the inputs
+    layer_dropout(rate = 0.5) %>%
+    layer_simple_rnn(units = 64,
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    layer_dropout(rate = 0.5) %>%
+    layer_dense(units=20, activation = "relu") %>%
+    time_distributed(keras::layer_dense(units = 1))
+  
+  rnn_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
+  rnn_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 6, verbose = 1, restore_best_weights = T)) )    
+  rnn_forecast = rnn_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
+  rnn_forecast = rnn_forecast * normalization[2] + normalization[1]
+  
+  return(rnn_forecast)   
+}
 
+
+
+##EDIT THESE SETTINGS
+var = msts_split$train
+forecasthorizon = 365
+
+##DO NOT REALLY NEED TO EDIT THIS PART######
+forecast = lstmforecast(var,forecasthorizon)
+forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast))
+autoplot(forecastedseries) + autolayer(ts(var))
+
+y_pred <- forecastedseries[(length(forecastedseries) - forecasthorizon + 1) : length(forecastedseries)]
+y_test <- msts_split$test
+sqrt(mean((y_test - y_pred)^2))
+
+x_axes = seq(1:forecasthorizon)
+plot(x_axes, y_pred, type="l", col="red", lwd=2)
+lines(x_axes, y_test, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+
+```

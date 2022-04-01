@@ -23,9 +23,6 @@ library(randomForest) # for RF modelling
 ```{r}
 rm(list = ls())
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
-views = daily_data$views / 1000000
-test_size = ceiling(dim(daily_data)[1] * 0.2)
-train_size = dim(daily_data)[1] - test_size
 
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))

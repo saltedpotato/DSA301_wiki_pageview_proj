@@ -14,10 +14,6 @@ library(randomForest) # for RF modelling
 #source('dataprocessing.R')
 ```
 
-```{r}
-# get_sequential_data(3,10)
-```
-
 
 ### Importing data
 ```{r}
@@ -41,28 +37,45 @@ msts_test = msts_split$test
 ### FeedForward NN Training
 ```{r}
 
-# NN_model = stlm(msts_train, modelfunction=forecast::nnetar)
-# autoplot(msts_wiki_daily)+autolayer(forecast(NN_model, h = 482))
-# accuracy(forecast(NN_model, h= 482), msts_test)
+#NN without xreg on seasonal adjusted data
+NN_model1 = stlm(msts_train, modelfunction=forecast::nnetar)
+NN_forecast1 = forecast(NN_model1, h = val_size)
+autoplot(msts_wiki_daily)+autolayer(NN_forecast1)
+
+#NN with xreg non-seasonal lag
 wiki_1 = diff(msts_train)
-wiki_7 = diff(msts_train,7)
 wiki1nn = nnetar(wiki_1)
 forecastedgrowth1 = forecast(wiki1nn, val_size)
+NN_model2 = nnetar(tail(msts_train, length(wiki_1)), 
+                   xreg = wiki_1 )
+NN_forecast2 = forecast(NN_model2, h = val_size, xreg = tail(forecastedgrowth1$x,val_size))
+
+#NN with xreg seasonal lag
+wiki_7 = diff(msts_train,7)
 wiki7nn = nnetar(wiki_7)
 forecastedgrowth7 = forecast(wiki7nn, val_size)
-#cbind(tail(wiki_1, length(wiki_7)), wiki_7)
-NN_model2 = nnetar(tail(msts_train, length(wiki_1)), xreg = wiki_1 )
-#cbind(tail(forecastedgrowth1$x, 482), tail(forecastedgrowth7$x, 482))
+NN_model3 = nnetar(tail(msts_train, length(wiki_7)), xreg = wiki_7)
+NN_forecast3 = forecast(NN_model3, h = val_size, xreg = tail(forecastedgrowth7$x,val_size))
 
+#NN with xreg non-seasonal and seasonal lag
+NN_model4 = nnetar(tail(msts_train, length(wiki_7)), xreg = cbind(tail(wiki_1, length(wiki_7)), wiki_7))
+NN_forecast4 = forecast(NN_model4, h = val_size, xreg = cbind(tail(forecastedgrowth1$x, val_size), tail(forecastedgrowth7$x, val_size)))
 ```
 
 ### FeedForward NN Testing
 ```{r}
-NN_forecast = forecast(NN_model2, h = val_size, xreg = tail(forecastedgrowth1$x, val_size) )
-autoplot(msts_test)+autolayer(NN_forecast)
-autoplot(msts_wiki_daily)+autolayer(NN_forecast, alpha = 0.7, col = 'red')
-autoplot(NN_forecast)
-accuracy(NN_forecast,msts_test)
+accuracy(NN_forecast1, msts_test)
+accuracy(NN_forecast2, msts_test)
+accuracy(NN_forecast3, msts_test)
+accuracy(NN_forecast4, msts_test)
+
+autoplot(msts_test)+autolayer(NN_forecast1, col = 'blue')
+autoplot(msts_test)+autolayer(NN_forecast2, col = 'red')
+autoplot(msts_test)+autolayer(NN_forecast3, col = 'green')
+autoplot(msts_test)+autolayer(NN_forecast4, col = 'purple')
+
+autoplot(msts_wiki_daily)+autolayer(NN_forecast3, alpha = 0.7, col = 'red')
+
 ```
 
 ## RNN

@@ -28,8 +28,6 @@ source("dataprocessing.R")
 ```{r}
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 # train = get_train_df(daily_data)
-# val = get_val_df(daily_data)
-
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
 
@@ -40,36 +38,41 @@ val_size = dim(daily_data)[1] - train_size
 msts_split <- ts_split(msts_wiki_daily, sample.out = val_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
+
+
+### STL Decomposition
+daily_train_decomp = mstl(msts_train)
+seasadj_wiki <- seasadj(daily_train_decomp)
+
+model_names = c()
+final_rmse = c()
+# ts_wiki_daily = daily_data$views %>% ts(., frequency = 7, start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
+# ts_train = ts_split(ts_wiki_daily, sample.out = val_size)$train
+# ts_test = ts_split(ts_wiki_daily, sample.out = val_size)$test
 ```
 
 ###Visualising STL decomposition
 ```{r}
-daily_train_decomp = mstl(msts_train)
-seasadj_wiki <- seasadj(daily_train_decomp)
 autoplot(daily_train_decomp)
 # Both the yearly seasonal pattern and the weekly seasonal pattern seem significant (in terms of impact on overall data), and therefore we do not rule any of them out at the moment.
 ```
 ## Differencing Seasonal Adjusted Component
-```{r}
-#No differencing: Test stat = 5
+```{r include=FALSE}
 # new = 6.483
-  seasadj_wiki %>% ur.kpss() %>% summary()
+seasadj_wiki %>% ur.kpss() %>% summary()
 
-#Test stat = 0.011
 # new = 0.0102
 seasadj_wiki %>% 
   diff(lag =1)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.0142 
 # new = 0.0137
 seasadj_wiki %>% 
   diff(lag =7)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.003
 # new = 0.0026
 seasadj_wiki %>% 
   diff(lag =7)%>% 
@@ -77,14 +80,12 @@ seasadj_wiki %>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 2.2636
 # new = 2.2177
 seasadj_wiki %>% 
   diff(lag = 365)%>%
   ur.kpss()%>%
   summary()
 
-#Test stat = 0.0143
 # new = 0.0137
 seasadj_wiki %>% 
   diff(lag =365)%>% 
@@ -103,16 +104,10 @@ checkresiduals(b1)
 checkresiduals(b2)
 accuracy(b1, msts_test)
 accuracy(b2, msts_test)
-# b1 RMSE - 17.005684
-# b2 RMSE - 17.835712
 
-# Ljung Box Test - We reject the null hypothesis that residuals are independently distributed, and we conclude that there is serial correlation. 
-```
-### Plotting Results
-```{r}
-autoplot(b1)
-autoplot(b2)
-# TRY TO PLOT THIS OUT
+# b1 RMSE - 13.946462
+# b2 RMSE - 12.75999
+# Ljung Box Test - Both Fail
 ```
 
 ##ARIMA Models
@@ -127,6 +122,7 @@ autoplot(trans_seasadj_wiki_2)
 ggtsdisplay(seasadj_wiki)
 pacf(seasadj_wiki)
 acf(seasadj_wiki)
+
 # ACF is slowly decreasing. This means that there is high autocorrelation with each lagged variable, suggesting that there is a unit room in the data and it is not stationary. This confirms what we had found earlier. We will look at the ACF and PACF of the variable based on the taking the difference, suggested by the KPSS test.
 
 ggtsdisplay(trans_seasadj_wiki_1)
@@ -143,15 +139,12 @@ acf(trans_seasadj_wiki_2)
 ```
 ###Shortlisting of ARIMA Models based of AICc
 ```{r}
-#ASK PROF ON THURSDAY. Update: Prof say can just mention that the graphs got show  some MA or AR orders and that supports our models (e.g. we got MA and AR components)
-# Using autoarima
 A0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
 
 # Variations based on the 1 non seasonal differencing
 # A1 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(3,0,3), period = 7))
 A2 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,3), period = 7))
 A3 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,2), period = 7))
-# Model 4 is problematic, according to R data is not stationary
 A4 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,0,2), period = 7))
 
 # Variations based on having both seasonal and non seasonal differencing
@@ -159,18 +152,34 @@ A5 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,1,1), peri
 A6 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7))
 # A7 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,2), period = 7))
 
-model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
-                       AIC = c(A0$aic, NA, A2$aic, A3$aic, A4$aic, A5$aic, A6$aic, NA))
-# model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
-#                        AIC = c(A0$aic, A1$aic, A2$aic, A3$aic, 100000, A5$aic, A6$aic, A7$aic))
+# Trying to work off a more specific implementation of auto.arima where the differences already specified.
+finalA = auto.arima(ts(seasadj_wiki, frequency = 7), d =1, D = 1)
 
-model_AIC
-# Based on this model AIC we are shortlisting the A0, A1, A2,A3 which all have similar AICs 
+data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
+                       AIC = c(A0$aic, NA, A2$aic, A3$aic, A4$aic, A5$aic, A6$aic, NA)) 
+# Based on this model AIC we are shortlisting the A0, A1, A2,A3 which all have similar AICs. It is strange that A5, and A6 do not have AIC that is very good, but they perform the best based on the validation error.
 ```
-
 ###Checking Residuals & Accuracy of Shortlisted ARIMA Models
 ```{r}
 #Only only that passed were (4,1,3)(2,1,2)[7] and (4,1,3)(1,0,2)[7]
+
+build_arima = function(dataset, non_seasonal_comp, seasonal_comp) {
+  return(stlm(dataset, modelfunction = Arima, order = non_seasonal_comp, seasonal = list(order = seasonal_comp, period = 7), robust = T))
+}
+
+get_important_stats = function(model) {
+  
+}
+
+f0 = build_arima(msts_train, c(4,1,1), c(2,0,2))
+f1 = build_arima(msts_train, c(2,1,3), c(3,0,3))
+f2 = build_arima(msts_train, c(2,1,3), c(2,0,3))
+f3 = build_arima(msts_train, c(2,1,3), c(2,0,2))
+f4 = build_arima(msts_train, c(3,1,3), c(2,0,2))
+f6 = build_arima(msts_train, c(3,1,3),  c(2,1,1))
+f7 = build_arima(msts_train, c(3,1,3), c(2,1,2))
+
+
 
 f0 = stlm(msts_train, modelfunction = Arima, order=c(4,1,1),
          seasonal = list(order = c(2,0,2), period = 7), robust = T)
@@ -189,7 +198,7 @@ f4 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
 
 # PROBLEMATIC MODEL - Cannot be estimated
 # f5 = stlm(msts_train, modelfunction = Arima, order=c(2,1,3),
-         # seasonal = list(order = c(2,1,1), period = 7), robust = T)
+#          seasonal = list(order = c(2,1,1), period = 7), robust = T)
 # ERROR stating non-finite finite-difference value. This is related to the stationarity of the data according to stackoverflow. Cannot do MLE when the data is not stationary. 
 
 f6 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3), 
@@ -198,66 +207,67 @@ f6 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
 f7 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3), 
           seasonal = list(order = c(2,1,2), period = 7), robust = T)
 
-
-# f7 = stlm(msts_train, modelfunction = Arima, order=c(4,1,2), 
-          # seasonal = list(order = c(2,0,2), period = 7), robust = T)
-
-checkresiduals(forecast(f0_test, h = val_size))
-
-checkresiduals(forecast(f0, h = val_size))
+checkresiduals(forecast(f0, h = val_size))$p.value
 checkresiduals(forecast(f1, h = val_size))
 checkresiduals(forecast(f2, h= val_size))
-checkresiduals(forecast(f3, h = val_size))
-checkresiduals(forecast(f4, h = val_size))
-# checkresiduals(forecast(f5))
-checkresiduals(forecast(f6, h = val_size))
-checkresiduals(forecast(f7, h = val_size))
+checkresiduals(forecast(f3, h = val_size)) 
+checkresiduals(forecast(f4, h = val_size)) #PASS
+# checkresiduals(forecast(f5, h = val_size))
+checkresiduals(forecast(f6, h = val_size)) # PASS
+checkresiduals(forecast(f7, h = val_size)) # PASS
 
 #Only f4, f6, f7 passed the Ljung-Box Test for the train set
-accuracy(forecast(f4), msts_test)
+accuracy(forecast(f0, h= val_size), msts_test)
+accuracy(forecast(f4, h= val_size), msts_test)
 # accuracy(forecast(f5), msts_test)
-accuracy(forecast(f6), msts_test)
-accuracy(forecast(f7), msts_test)
+accuracy(forecast(f6, h = val_size), msts_test)
+accuracy(forecast(f7, h = val_size), msts_test)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f6, h = val_size), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
                       breaks=c("Original","Forecast"))
 ```
 
+## ARIMA-X with 2020 Outlier
 ```{r}
+daily_data$y2020 = sapply(daily_data$date, function(x) {
+  if (year(x) ==2020) {return(1)}
+  return(0)
+})
 
-plot_info = function(model){
-  autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(model), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))  
-}
+train2020_dummy = daily_data$y2020[1:train_size]
+test2020_dummy = daily_data$y2020[(train_size+1): dim(daily_data)[1]]
+# f6_adj = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
+#          seasonal = list(order = c(2,1,1), period = 7), robust = T, xreg = train2020_dummy)
 
-plot_info(b1)
+## Alternative Approach manually forecasting everything.
+arimax_model= Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7), xreg = train2020_dummy) %>% forecast (., xreg = test2020_dummy, h = val_size)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f0), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
+seas365 = seasonal(daily_train_decomp)[,2] %>% snaive(.,h = val_size) %>% forecast()
+accuracy(as.vector(seas7$mean) + seas365$mean + arimax_model$mean, msts_test)
+# RMSE of 10.57301, which is worse thatn the original model without the adjustment for 2020
+```
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+## Facebook Prophet
+```{r}
+prophet_data = rename(daily_data, y = views, ds = date)
+prophet_train = slice_head(prophet_data, n = train_size)
+prophet_test = slice_tail(prophet_data, n = val_size)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f3), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+model = prophet(prophet_train, daily.seasonality = FALSE)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+# Prediction
+future = make_future_dataframe(model, periods = dim(prophet_test)[1])
+prophet_forecast = predict(model, future) %>% slice_tail(., n = dim(prophet_test)[1])
+accuracy(prophet_test$y, prophet_forecast$yhat)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f6), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+# accuracy(forecast(f7, h=dim(prophet_test[1])), msts_test)
+# accuracy(forecast(f7), msts_test)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f7), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+# Evaluation
+# prophet_plot_components(model, prophet_forecast)
+# autoplot(prophet_forecast$yhat)
 ```
 
 ## Random Forest
@@ -298,53 +308,30 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 ```
 
 
-## Facebook Prophet
+
+
+
+
+
+### Plotting Results
 ```{r}
-prophet_data = rename(daily_data, y = views, ds = date)
-prophet_train = slice_head(prophet_data, n = train_size)
-prophet_test = slice_tail(prophet_data, n = val_size)
 
-model = prophet(prophet_train, daily.seasonality = FALSE)
+plot_info = function(model){
+  autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(model, h = val_size), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                      breaks=c("Original","Forecast"))  
+}
 
-# Prediction
-future = make_future_dataframe(model, periods = dim(prophet_test)[1])
-prophet_forecast = predict(model, future) %>% slice_tail(., n = dim(prophet_test)[1])
-accuracy(prophet_test$y, prophet_forecast$yhat)
+# Benchmark Models
+plot_info(b1)
+plot_info(b2)
 
-# accuracy(forecast(f7, h=dim(prophet_test[1])), msts_test)
-# accuracy(forecast(f7), msts_test)
+# Best ARIMA Models
+plot_info(f6)
 
-# Evaluation
-# prophet_plot_components(model, prophet_forecast)
-# autoplot(prophet_forecast$yhat)
-
+# Prophet
+# autoplot(msts_wiki_daily, series = "Original")+autolayer(ts(prophet_forecast$yhat, start =c(2021, 1, 1)), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"), breaks=c("Original","Forecast"))
 x_axes = seq(1:(length(prophet_forecast$yhat)))
 plot(x_axes, prophet_test$y, type="l", col="red", lwd=2)
 lines(x_axes, prophet_forecast$yhat, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-       col=c("red", "blue"), lty=1,cex=0.8)
+legend("topleft", legend=c("y-original", "y-predicted"), col=c("red", "blue"), lty=1,cex=0.8)
 ```
-
-## ARIMA-X with 2020 Outlier
-```{r}
-daily_data$y2020 = sapply(daily_data$date, function(x) {
-  if (year(x) ==2020) {return(1)}
-  return(0)
-})
-
-adj2020 = daily_data$y2020[1:train_size]
-# length(daily_data$y2020[(train_size+1):(train_size+test_size)])
-
-testA1 = auto.arima(ts(seasadj_wiki, frequency = 7), xreg = adj2020)
-```
-
-```{r}
-f4_adj = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
-         seasonal = list(order = c(2,0,2), period = 7), robust = T, xreg = y2020)
-
-accuracy(forecast(f4_adj), msts_test)
-
-?stlm()
-```
-
-

@@ -109,7 +109,11 @@ lstmforecast = function(yvariable, forecasthorizon){
     time_distributed(keras::layer_dense(units = 1))
   
   lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
-  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 3, verbose = 1, restore_best_weights = T)) )    
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, 
+                     batch_size = 1, epochs = 20,shuffle = FALSE, 
+                     # validation_split = 0.2, 
+                     # callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 3, verbose = 1, restore_best_weights = T)) 
+  )
   lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
   
@@ -182,7 +186,28 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 
 forecast$model %>% save_model_hdf5("LSTM.h5")
 
+# rachel = load_model_hdf5("LSTM_Rachel_v1.h5")
+# 
+# normalization = c(mean(var), sd(var))
+#   train_norm = (var - normalization[1]) / normalization[2]
+#   train_norm = as.matrix(train_norm)
+#   x_test = var[(nrow(train_norm) - 2*forecasthorizon + 1):(nrow(train_norm) - forecasthorizon + 1)]
+#   x_test_scaled = (x_test - normalization[1]) / normalization[2]
+#   x_pred_arr = array(data = x_test_scaled,  dim = c( 1, forecasthorizon,  1 ) )
+# y_pred = rachel%>%predict(x_pred_arr)%>%.[, , 1]  #LINE X
+# y_pred = y_pred * normalization[2] + normalization[1]
+# sqrt(mean((y_test - y_pred)^2))
+# 
+# x_axes = seq(1:length(y_pred))
+# plot(x_axes, y_test, type="l", col="red", lwd=2)
+# lines(x_axes, y_pred, col="blue",lwd=2)
+# legend("topleft", legend=c("y-original", "y-predicted"),
+#         col=c("red", "blue"), lty=1,cex=0.8)
+
 ```
+
+
+
 ```{r RNN}
 ##DO NOT REALLY NEED TO EDIT THIS PART######
 forecast = rnnforecast(var,forecasthorizon)

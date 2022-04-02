@@ -21,7 +21,7 @@ rm(list = ls())
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
-msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
+msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), ts.frequency = 7)
 # Creating Train and Test Set
 train_size = length(daily_data$date[year(daily_data$date) < 2021])
 val_size = dim(daily_data)[1] - train_size
@@ -74,7 +74,7 @@ autoplot(msts_test)+autolayer(NN_forecast2, col = 'red')
 autoplot(msts_test)+autolayer(NN_forecast3, col = 'green')
 autoplot(msts_test)+autolayer(NN_forecast4, col = 'purple')
 
-autoplot(msts_wiki_daily)+autolayer(NN_forecast3, alpha = 0.7, col = 'red')
+autoplot(msts_wiki_daily)+autolayer(NN_forecast1, alpha = 0.7, col = 'red')
 
 ```
 

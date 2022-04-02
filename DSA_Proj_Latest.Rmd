@@ -3,9 +3,6 @@ title: "DSA301 Project"
 author: "Everyone"
 output: html_document
 ---
-Questions:
-1. Decompose first or transform first (benchmark models)
-3. How to read the PACF & ACF graphs? Currently just using guess and check from changing models provided by auto.arima
 
 ##Loading Packages
 ```{r cars, include=FALSE}
@@ -21,7 +18,7 @@ library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
 library(randomForest) # for RF modelling 
-source("dataprocessing.R")
+#source("dataprocessing.R")
 ```
 
 ### Reading CSV, Processing into TS Object, Visualisation of Data
@@ -143,29 +140,25 @@ acf(trans_seasadj_wiki_2)
 ```
 ###Shortlisting of ARIMA Models based of AICc
 ```{r}
-#ASK PROF ON THURSDAY. Update: Prof say can just mention that the graphs got show  some MA or AR orders and that supports our models (e.g. we got MA and AR components)
 # Using autoarima
 A0 <- auto.arima(ts(seasadj_wiki, frequency = 7)) #(4,1,1)(2,0,2)[7]
 
 # Variations based on the 1 non seasonal differencing
-# A1 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(3,0,3), period = 7))
+
 A2 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,3), period = 7))
-A3 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,0,2), period = 7))
+
 # Model 4 is problematic, according to R data is not stationary
 A4 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,0,2), period = 7))
 
 # Variations based on having both seasonal and non seasonal differencing
-A5 <- Arima(seasadj_wiki, order=c(2,1,3), seasonal = list(order = c(2,1,1), period = 7))
-A6 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7))
-# A7 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,2), period = 7))
 
-model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
-                       AIC = c(A0$aic, NA, A2$aic, A3$aic, A4$aic, A5$aic, A6$aic, NA))
-# model_AIC = data.frame(model = c("A0", "A1", "A2", "A3", "A4", "A5", "A6","A7"),
-#                        AIC = c(A0$aic, A1$aic, A2$aic, A3$aic, 100000, A5$aic, A6$aic, A7$aic))
+A6 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7))
+A7 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,3), period = 7))
+
+model_AIC = data.frame(model = c("A0","A2", "A4", "A6","A7"),
+                       AIC = c(A0$aic, A2$aic, A4$aic, A6$aic, A7$aic))
 
 model_AIC
-# Based on this model AIC we are shortlisting the A0, A1, A2,A3 which all have similar AICs 
 ```
 
 ###Checking Residuals & Accuracy of Shortlisted ARIMA Models
@@ -175,127 +168,44 @@ model_AIC
 f0 = stlm(msts_train, modelfunction = Arima, order=c(4,1,1),
          seasonal = list(order = c(2,0,2), period = 7), robust = T)
 
-f1 = stlm(msts_train, modelfunction = Arima, order=c(2,1,3),
-         seasonal = list(order = c(3,0,3), period = 7), robust = T) 
-
 f2 = stlm(msts_train, modelfunction = Arima, order=c(2,1,3),
          seasonal = list(order = c(2,0,3), period = 7), robust = T) 
-
-f3 = stlm(msts_train, modelfunction = Arima, order=c(2,1,3),
-         seasonal = list(order = c(2,0,2), period = 7), robust = T) 
 
 f4 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
          seasonal = list(order = c(2,0,2), period = 7), robust = T)
 
-# PROBLEMATIC MODEL - Cannot be estimated
-# f5 = stlm(msts_train, modelfunction = Arima, order=c(2,1,3),
-         # seasonal = list(order = c(2,1,1), period = 7), robust = T)
-# ERROR stating non-finite finite-difference value. This is related to the stationarity of the data according to stackoverflow. Cannot do MLE when the data is not stationary. 
 
 f6 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3), 
          seasonal = list(order = c(2,1,1), period = 7), robust = T) 
 
 f7 = stlm(msts_train, modelfunction = Arima, order=c(3,1,3), 
-          seasonal = list(order = c(2,1,2), period = 7), robust = T)
+          seasonal = list(order = c(2,1,3), period = 7), robust = T)
 
-
-# f7 = stlm(msts_train, modelfunction = Arima, order=c(4,1,2), 
-          # seasonal = list(order = c(2,0,2), period = 7), robust = T)
-
-checkresiduals(forecast(f0_test, h = val_size))
 
 checkresiduals(forecast(f0, h = val_size))
-checkresiduals(forecast(f1, h = val_size))
 checkresiduals(forecast(f2, h= val_size))
-checkresiduals(forecast(f3, h = val_size))
 checkresiduals(forecast(f4, h = val_size))
-# checkresiduals(forecast(f5))
 checkresiduals(forecast(f6, h = val_size))
 checkresiduals(forecast(f7, h = val_size))
 
 #Only f4, f6, f7 passed the Ljung-Box Test for the train set
 accuracy(forecast(f4), msts_test)
-# accuracy(forecast(f5), msts_test)
 accuracy(forecast(f6), msts_test)
 accuracy(forecast(f7), msts_test)
 
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+
 ```
 
 ```{r}
 
 plot_info = function(model){
-  autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(model), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+  autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(model, h = val_size), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
                       breaks=c("Original","Forecast"))  
 }
 
-plot_info(b1)
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f0), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f3), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f4), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f6), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(f7), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b1), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
-
-autoplot(msts_wiki_daily, series = "Original")+autolayer(forecast(b2), PI = F, alpha = 0.9, col = "red", series = "Forecast")+ scale_colour_manual(values=c("Original"="black","Forecast"="red"),
-                      breaks=c("Original","Forecast"))
+plot_info(f7)
 ```
 
-## Random Forest
-```{r}
-matrix_train <- data.frame(day1 = views_train_matrix[,1],
-                           day2 = views_train_matrix[,2],
-                           day3 = views_train_matrix[,3],
-                           day4 = views_train_matrix[,4],
-                           day5 = views_train_matrix[,5],
-                           day6 = views_train_matrix[,6],
-                           day7 = views_train_matrix[,7],
-                           pred = views_train_matrix[,8])
-
-
-matrix_test <- data.frame(day1 = views_matrix[,1],
-                           day2 = views_matrix[,2],
-                           day3 = views_matrix[,3],
-                           day4 = views_matrix[,4],
-                           day5 = views_matrix[,5],
-                           day6 = views_matrix[,6],
-                           day7 = views_matrix[,7])
-
-rf_model <- randomForest(pred ~ ., data = matrix_train,
-                         ntree = 1000, mtry = 2, nodesize = 5, importance = T)
-
-
-y_pred <- predict(rf_model, matrix_test) 
-y_test = y_pred[(length(y_pred)-length(views_test)+1):length(y_pred)]
-rmse_rf <- sqrt(mean((views_test-y_test)^2))
-rmse_rf
-
-x_axes = seq(1:(length(views_test)))
-plot(x_axes, views_test, type="l", col="red", lwd=2)
-lines(x_axes, y_test, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-       col=c("red", "blue"), lty=1,cex=0.8)
-
-```
 
 
 ## Facebook Prophet

@@ -309,7 +309,7 @@ prophet_test = slice_tail(prophet_data, n = val_size)
 
 model = prophet(data.frame(prophet_train), daily.seasonality = FALSE)
 
-# Prediction7
+# Prediction
 future = make_future_dataframe(model, periods = forecasthorizon)
 prophet_forecast = predict(model, future)
 prophet_predict = predict(model, future) %>% slice_tail(., n = forecasthorizon)

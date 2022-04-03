@@ -79,7 +79,7 @@ autoplot(msts_wiki_daily)+autolayer(NN_forecast1, alpha = 0.7, col = 'red')
 ```
 
 ```{r LSTM, RNN model Functions}
-lstmforecast = function(yvariable, forecasthorizon){
+lstmforecast = function(yvariable, forecasthorizon, epochs){
   normalization = c(mean(yvariable), sd(yvariable))
   train_norm = (yvariable - normalization[1]) / normalization[2]
   train_norm = as.matrix(train_norm)
@@ -102,21 +102,21 @@ lstmforecast = function(yvariable, forecasthorizon){
     # layer_dense(units=20, activation = "relu") %>%
     # fraction of the units to drop for the linear transformation of the inputs
     layer_dropout(rate = 0.5) %>%
-    layer_lstm(units = 64,
+    layer_lstm(units = 32,
                return_sequences = TRUE,
                stateful = TRUE) %>%
     layer_dropout(rate = 0.5) %>%
     time_distributed(keras::layer_dense(units = 1))
   
   lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
-  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = 20,shuffle = FALSE, validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 3, verbose = 1, restore_best_weights = T)) )    
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = epochs,shuffle = FALSE, verbose = 2)    
   lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
   
   return(list(model = lstm_model, values = lstm_forecast))  
 }
 
-rnnforecast = function(yvariable, forecasthorizon){
+rnnforecast = function(yvariable, forecasthorizon, epochs){
   normalization = c(mean(yvariable), sd(yvariable))
   train_norm = (yvariable - normalization[1]) / normalization[2]
   train_norm = as.matrix(train_norm)
@@ -132,12 +132,12 @@ rnnforecast = function(yvariable, forecasthorizon){
   #####LSTM SETTINGS COPY PASTED FROM DOCS WITHOUT MODIFICATION###########
   rnn_model = keras_model_sequential()
   rnn_model %>%
-    layer_simple_rnn(units = 50, # size of the layer
+    layer_simple_rnn(units = 30, # size of the layer
                batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
                return_sequences = TRUE,
                stateful = TRUE) %>%
     layer_dropout(rate = 0.5) %>%
-    layer_simple_rnn(units=50,
+    layer_simple_rnn(units=30,
                      return_sequences = TRUE,
                      stateful = TRUE) %>%
     layer_dropout(rate = 0.5) %>%
@@ -147,10 +147,9 @@ rnnforecast = function(yvariable, forecasthorizon){
   
   rnn_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
   rnn_model %>% fit(x = x_train_arr, y = y_train_arr, 
-                    batch_size = 1, epochs = 20,
-                    shuffle = FALSE 
-                    # validation_split = 0.2, callbacks = list(callback_early_stopping(monitor = 'val_loss', patience = 5, verbose = 1, restore_best_weights = T)) 
-                    )    
+                    batch_size = 1, epochs = epochs,
+                    shuffle = FALSE, verbose = 2)
+
   rnn_forecast = rnn_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
   rnn_forecast = rnn_forecast * normalization[2] + normalization[1]
   
@@ -160,15 +159,31 @@ rnnforecast = function(yvariable, forecasthorizon){
 
 ```
 
+```{r RNN}
+##DO NOT REALLY NEED TO EDIT THIS PART######
+forecast = rnnforecast(var,forecasthorizon, 5)
+
+y_pred <- forecast$values
+y_test <- var[(length(var) - val_size + 1):length(var)]
+sqrt(mean((y_test - y_pred)^2))
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+
+forecast$model %>% save_model_hdf5("RNN.h5")
+```
+
+
 ```{r LSTM only}
 ##LSTM Only
 var = msts_wiki_daily
 forecasthorizon = val_size
 
 ##DO NOT REALLY NEED TO EDIT THIS PART######
-forecast = lstmforecast(var,forecasthorizon)
-forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast$values))
-autoplot(forecastedseries) + autolayer(ts(var))
+forecast = lstmforecast(var,forecasthorizon, 10)
 
 y_pred <- forecast$values
 y_test <- var[(length(var) - val_size + 1):length(var)]
@@ -183,28 +198,10 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 forecast$model %>% save_model_hdf5("LSTM.h5")
 
 ```
-```{r RNN}
-##DO NOT REALLY NEED TO EDIT THIS PART######
-forecast = rnnforecast(var,forecasthorizon)
-forecastedseries = ts(append(var[1:(length(var)-forecasthorizon)], forecast$values))
-autoplot(forecastedseries) + autolayer(ts(var))
-
-y_pred <- forecast$values
-y_test <- var[(length(var) - val_size + 1):length(var)]
-sqrt(mean((y_test - y_pred)^2))
-
-x_axes = seq(1:length(y_pred))
-plot(x_axes, y_test, type="l", col="red", lwd=2)
-lines(x_axes, y_pred, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-# forecast$model %>% save_model_hdf5(RNN.h5")
-```
 
 ```{r Arima on seasadj, LSTM on seasonal 7 and seasonal 365}
 forecasthorizon = val_size
-
+y_test <- daily_data$views[(length(daily_data$views) - forecasthorizon + 1):length(daily_data$views)]
 ##Arima on trend, LSTM on seasonal'
 data_decomp <- mstl(msts_wiki_daily)
 seas_adj_comp <- seasadj(data_decomp)
@@ -212,39 +209,78 @@ train_seasadj <- seas_adj_comp[1:(length(seas_adj_comp) - forecasthorizon)]
 
 arima_seasadj1 <- auto.arima(train_seasadj, seasonal = F)
 arima_seasadj2 <-  Arima(train_seasadj, order = c(4,1,3))
+arima_seasadj3 <- Arima(train_seasadj, order=c(3,1,3), seasonal = list(order = c(2,0,3), period = 7))
 arima_seasadj1
 arima_seasadj2
+arima_seasadj3
 
-y_pred_seasadj <- forecast(arima_seasadj2, h = forecasthorizon)
+y_pred_seasadj <- forecast(arima_seasadj3, h = forecasthorizon)
 y_pred_seasadj <- y_pred_seasadj$mean 
-
-var7 = seasonal(data_decomp)[,1]
-
-##DO NOT REALLY NEED TO EDIT THIS PART######
-forecast_seas7 = lstmforecast(var7,forecasthorizon)
-forecastedseries_seas7 = ts(append(var7[1:(length(var7)-forecasthorizon)], forecast$values))
-autoplot(forecastedseries_seas7) + autolayer(ts(var7))
-
-y_pred_seas7 <- forecast_seas7$values 
-
-var365 = seasonal(data_decomp)[,2]
-
-forecast_seas365 = lstmforecast(var365,forecasthorizon)
-forecastedseries_seas365 = ts(append(var365[1:(length(var365)-forecasthorizon)], forecast$values))
-autoplot(forecastedseries_seas365) + autolayer(ts(var365))
-
-y_pred_seas365 <- forecast_seas365$values 
+sqrt(mean((y_pred_seasadj - seas_adj_comp[(length(seas_adj_comp) - forecasthorizon + 1):length(seas_adj_comp)])^2))
 
 
-y_pred <- y_pred_seasadj + y_pred_seas7 + y_pred_seas365
+var_seas = var365
 
-sqrt(mean((y_pred - msts_test)^2))
+forecast_seas = lstmforecast(var_seas,forecasthorizon, 5)
+y_pred_seas <- forecast_seas$values 
+
+
+y_pred <- y_pred_seasadj + y_pred_seas
+sqrt(mean((y_pred - y_test)^2))
+
 
 x_axes = seq(1:length(y_pred))
-plot(x_axes, msts_test, type="l", col="red", lwd=2)
+plot(x_axes, y_test, type="l", col="red", lwd=2)
 lines(x_axes, y_pred, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"),
        col=c("red", "blue"), lty=1,cex=0.8)
 
-forecast$model %>% save_model_hdf5("lstm_seasonal7.h5")
+forecast_seas7$model %>% save_model_hdf5("lstm_seasonal7.h5")
+forecast_seas365$model %>% save_model_hdf5("lstm_seasonal365.h5")
+```
+
+
+```{r with Prophet}
+prophet_data7 = rename(daily_data, y = views, ds = date)
+prophet_data7$y = data.frame(var7)[,1]
+prophet_train7 = slice_head(prophet_data7, n = train_size)
+prophet_test7 = slice_tail(prophet_data7, n = val_size)
+
+
+model7 = prophet(data.frame(prophet_train7), daily.seasonality = FALSE)
+
+# Prediction7
+future7 = make_future_dataframe(model7, periods = forecasthorizon)
+prophet_forecast7 = predict(model7, future7)
+prophet_predict7 = predict(model7, future7) %>% slice_tail(., n = forecasthorizon)
+accuracy(prophet_test7$y, prophet_predict7$yhat)
+
+
+y_pred <- y_pred_seasadj + prophet_predict365$yhat + y_pred_seas7 #lstm
+sqrt(mean((y_pred - y_test)^2))
+```
+
+
+```{r with LSTM on seasadj, Prophet on seas}
+
+forecast_seasadj = lstmforecast(seas_adj_comp,forecasthorizon)
+y_pred_seasadj <- forecast_seasadj$values 
+
+
+prophet_data = rename(daily_data, y = views, ds = date)
+prophet_data$y = data.frame(var_seas)[,1]
+prophet_train = slice_head(prophet_data, n = train_size)
+prophet_test = slice_tail(prophet_data, n = val_size)
+
+
+model = prophet(data.frame(prophet_train), daily.seasonality = FALSE)
+
+# Prediction7
+future = make_future_dataframe(model, periods = forecasthorizon)
+prophet_forecast = predict(model, future)
+prophet_predict = predict(model, future) %>% slice_tail(., n = forecasthorizon)
+accuracy(prophet_test$y, prophet_predict$yhat)
+
+y_pred <- y_pred_seasadj + prophet_predict$yhat + y_pred_seas7 #lstm
+sqrt(mean((y_pred - y_test)^2))
 ```

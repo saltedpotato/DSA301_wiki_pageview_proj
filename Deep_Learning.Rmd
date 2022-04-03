@@ -160,6 +160,9 @@ rnnforecast = function(yvariable, forecasthorizon, epochs){
 ```
 
 ```{r RNN}
+var = msts_wiki_daily
+forecasthorizon = val_size
+
 ##DO NOT REALLY NEED TO EDIT THIS PART######
 forecast = rnnforecast(var,forecasthorizon, 5)
 
@@ -181,6 +184,17 @@ forecast$model %>% save_model_hdf5("RNN.h5")
 ##LSTM Only
 var = msts_wiki_daily
 forecasthorizon = val_size
+
+forecast = lstmforecast(var,forecasthorizon, 10)
+y_pred <- forecast$values
+y_test <- var[(length(var) - val_size + 1):length(var)]
+sqrt(mean((y_test - y_pred)^2))
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
 
 forecast$model %>% save_model_hdf5("LSTM.h5")
 
@@ -204,25 +218,6 @@ forecast$model %>% save_model_hdf5("LSTM.h5")
 
 ```
 
-
-
-```{r RNN}
-##DO NOT REALLY NEED TO EDIT THIS PART######
-forecast = lstmforecast(var,forecasthorizon, 10)
-
-y_pred <- forecast$values
-y_test <- var[(length(var) - val_size + 1):length(var)]
-sqrt(mean((y_test - y_pred)^2))
-
-x_axes = seq(1:length(y_pred))
-plot(x_axes, y_test, type="l", col="red", lwd=2)
-lines(x_axes, y_pred, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"),
-        col=c("red", "blue"), lty=1,cex=0.8)
-
-forecast$model %>% save_model_hdf5("LSTM.h5")
-
-```
 
 ```{r Arima on seasadj, LSTM on seasonal 7 and seasonal 365}
 forecasthorizon = val_size

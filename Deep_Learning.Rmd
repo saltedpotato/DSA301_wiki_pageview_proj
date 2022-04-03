@@ -217,7 +217,44 @@ forecast$model %>% save_model_hdf5("LSTM.h5")
 #         col=c("red", "blue"), lty=1,cex=0.8)
 
 ```
+```{r Arima on seasadj, RNN on seasonal 7 and seasonal 365}
+forecasthorizon = val_size
+y_test <- daily_data$views[(length(daily_data$views) - forecasthorizon + 1):length(daily_data$views)]
+##Arima on trend, RNN on seasonal'
+data_decomp <- mstl(msts_wiki_daily)
+seas_adj_comp <- seasadj(data_decomp)
+train_seasadj <- seas_adj_comp[1:(length(seas_adj_comp) - forecasthorizon)]
 
+arima_seasadj1 <- auto.arima(train_seasadj, seasonal = F)
+arima_seasadj2 <-  Arima(train_seasadj, order = c(4,1,3))
+arima_seasadj3 <- Arima(train_seasadj, order=c(3,1,3), seasonal = list(order = c(2,0,3), period = 7))
+arima_seasadj1
+arima_seasadj2
+arima_seasadj3
+
+y_pred_seasadj <- forecast(arima_seasadj3, h = forecasthorizon)
+y_pred_seasadj <- y_pred_seasadj$mean 
+sqrt(mean((y_pred_seasadj - seas_adj_comp[(length(seas_adj_comp) - forecasthorizon + 1):length(seas_adj_comp)])^2))
+
+
+var_seas = seasonal(data_decomp)[,1] + seasonal(data_decomp)[,2]
+
+forecast_seas = rnnforecast(var_seas,forecasthorizon, 10)
+y_pred_seas <- forecast_seas$values 
+
+
+y_pred <- y_pred_seasadj + y_pred_seas
+sqrt(mean((y_pred - y_test)^2))
+
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+       col=c("red", "blue"), lty=1,cex=0.8)
+
+forecast_seas$model %>% save_model_hdf5("rnn_seasonal.h5")
+```
 
 ```{r Arima on seasadj, LSTM on seasonal 7 and seasonal 365}
 forecasthorizon = val_size
@@ -239,9 +276,9 @@ y_pred_seasadj <- y_pred_seasadj$mean
 sqrt(mean((y_pred_seasadj - seas_adj_comp[(length(seas_adj_comp) - forecasthorizon + 1):length(seas_adj_comp)])^2))
 
 
-var_seas = var365
+var_seas = seasonal(data_decomp)[,1] + seasonal(data_decomp)[,2]
 
-forecast_seas = lstmforecast(var_seas,forecasthorizon, 5)
+forecast_seas = lstmforecast(var_seas,forecasthorizon, 10)
 y_pred_seas <- forecast_seas$values 
 
 
@@ -255,8 +292,7 @@ lines(x_axes, y_pred, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"),
        col=c("red", "blue"), lty=1,cex=0.8)
 
-forecast_seas7$model %>% save_model_hdf5("lstm_seasonal7.h5")
-forecast_seas365$model %>% save_model_hdf5("lstm_seasonal365.h5")
+forecast_seas$model %>% save_model_hdf5("lstm_seasonal.h5")
 ```
 
 

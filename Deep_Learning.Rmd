@@ -17,7 +17,6 @@ library(randomForest) # for RF modelling
 
 ### Importing data
 ```{r}
-rm(list = ls())
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
@@ -29,6 +28,76 @@ val_size = dim(daily_data)[1] - train_size
 msts_split <- ts_split(msts_wiki_daily, sample.out = val_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
+```
+
+
+### Data Processing
+```{r}
+### STL Decomposition
+daily_train_decomp = mstl(msts_train)
+seasadj_wiki = seasadj(daily_train_decomp) %>% ts(., frequency = 7)
+
+### Forecasted seasonal values using snaive
+seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
+seas365 = seasonal(daily_train_decomp)[,2] %>% ts(., frequency = 365) %>%  snaive(.,h = val_size) %>% forecast()
+
+### Exogenous Variables
+#### 2020 Dummy
+daily_data$y2020 = sapply(daily_data$date, function(x) {
+  if (year(x) ==2020) {return(1)}
+  return(0)
+})
+
+train2020_dummy = daily_data$y2020[1:train_size]
+test2020_dummy = daily_data$y2020[(train_size+1): dim(daily_data)[1]]
+
+#### Differenced Seasonally Adjusted Information
+seasadj_wiki_differenced = seasadj_wiki %>% diff()
+```
+
+
+### FF NN TEST
+```{r}
+getNN_accuracy = function(data, p = 35, P= 5, xregterm = NULL, xregterm_forecasted= NULL){
+    seasadj_forecast = nnetar(data, p =  p, P = P, xreg= xregterm) %>% forecast(., h= val_size, xreg = xregterm_forecasted)
+    final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
+    return (accuracy(final_forecast, msts_test))
+}
+
+## Feedfoward NN, optimising for the number of seasonal lags and non-seasonal lags to be used within the model
+m1 = getNN_accuracy(data = seasadj_wiki)
+### RMSE xreg, p = 35, P = 5 is 10.82363, 10.727, 10.403
+### Scale inputs doens't do anything - actually makes it worse
+
+# Feeding differenced data into neural network instead
+adjustedNN_new = nnetar(seasadj_wiki_new, p = 35, P = 5)
+adjustedNN_new_pred = forecast(adjustedNN_new, h = val_size)$mean
+transformed = as.vector(adjustedNN_new_pred)
+transformed[1] = transformed[1] + as.vector(seasadj_wiki)[train_size]
+transformed = cumsum(transformed)
+final_pred_new = transformed + as.vector(seas7$mean) + as.vector(seas365$mean) 
+accuracy(final_pred_new, msts_test)
+# RMSE is 18.16
+# RMSE is 11.83654
+# The next time it became 13.95
+# It is being evaluated on the same dataset, so it means that the parameters that are being estimated are constantly changing, based perhaps on the weight initialisation, the approach to gradient descent that is being used.... Highly variable result... 
+```
+### FF NN with exogenous variables
+```{r}
+# creating exogenous variables
+# 1st variable: Differenced information forecasted using a feedforward neural network. 2nd Variable: 2020 Dummy
+exogenous_var = matrix(c(seasadj_wiki_differenced, train2020_dummy), ncol = 2)
+exogenous_var_val = matrix(c(adjustedNN_new_pred,test2020_dummy), ncol=2)
+
+# Building the model
+getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val)
+# RMSE 15.29
+getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var[,1], xregterm_forecasted = exogenous_var_val[,1])
+# RMSE is 16.3668
+getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var[,2], xregterm_forecasted = exogenous_var_val[,2])
+### RMSE is 10.86401
+### RMSE is 14.57215
+### RMSE is 13.98177
 ```
 
 
@@ -73,10 +142,10 @@ autoplot(msts_test)+autolayer(NN_forecast1, col = 'blue')
 autoplot(msts_test)+autolayer(NN_forecast2, col = 'red')
 autoplot(msts_test)+autolayer(NN_forecast3, col = 'green')
 autoplot(msts_test)+autolayer(NN_forecast4, col = 'purple')
-
-autoplot(msts_wiki_daily)+autolayer(NN_forecast1, alpha = 0.7, col = 'red')
+# autoplot(msts_wiki_daily)+autolayer(NN_forecast1, alpha = 0.7, col = 'red')
 
 ```
+
 
 ```{r LSTM, RNN model Functions}
 lstmforecast = function(yvariable, forecasthorizon, epochs){

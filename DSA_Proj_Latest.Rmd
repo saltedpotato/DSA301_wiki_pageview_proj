@@ -42,11 +42,8 @@ msts_test = msts_split$test
 daily_train_decomp = mstl(msts_train)
 seasadj_wiki <- seasadj(daily_train_decomp)
 
-model_names = c()
-final_rmse = c()
-# ts_wiki_daily = daily_data$views %>% ts(., frequency = 7, start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
-# ts_train = ts_split(ts_wiki_daily, sample.out = val_size)$train
-# ts_test = ts_split(ts_wiki_daily, sample.out = val_size)$test
+# model_names = c()
+# final_rmse = c()
 
 autoplot(msts_train)
 ```
@@ -175,7 +172,13 @@ build_arima = function(dataset, non_seasonal_comp, seasonal_comp) {
 }
 
 get_important_stats = function(model) {
-  
+  model_forecast = forecast(model, h = val_size)
+  residual_check = checkresiduals(model_forecast)$p.value
+  rmse = accuracy(model_forecast, msts_test)[2,2]
+  return_list = list(residual_check, rmse)
+  names(return_list) = c("Ljung Box p value", "RMSE")
+                     
+  return (return_list)
 }
 
 f0 = build_arima(msts_train, c(4,1,1), c(2,0,2))
@@ -184,6 +187,7 @@ f4 = build_arima(msts_train, c(3,1,3), c(2,0,2))
 f6 = build_arima(msts_train, c(3,1,3), c(2,1,1))
 f7 = build_arima(msts_train, c(3,1,3), c(2,1,3))
 
+# get_important_stats(f7)
 
 
 checkresiduals(forecast(f0, h = val_size))$p.value
@@ -209,8 +213,6 @@ daily_data$y2020 = sapply(daily_data$date, function(x) {
 
 train2020_dummy = daily_data$y2020[1:train_size]
 test2020_dummy = daily_data$y2020[(train_size+1): dim(daily_data)[1]]
-# f6_adj = stlm(msts_train, modelfunction = Arima, order=c(3,1,3),
-#          seasonal = list(order = c(2,1,1), period = 7), robust = T, xreg = train2020_dummy)
 
 ## Alternative Approach manually forecasting everything.
 arimax_model= Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7), xreg = train2020_dummy) %>% forecast (., xreg = test2020_dummy, h = val_size)
@@ -235,13 +237,13 @@ future = make_future_dataframe(model, periods = dim(prophet_test)[1])
 prophet_forecast = predict(model, future)
 prophet_predict = predict(model, future) %>% slice_tail(., n = dim(prophet_test)[1])
 accuracy(prophet_test$y, prophet_predict$yhat)
+# RMSE 23.79169 which is significantly worse. Problem is that the model does not do a good job of estiamting the long term trend.
 
-# accuracy(forecast(f7, h=dim(prophet_test[1])), msts_test)
-# accuracy(forecast(f7), msts_test)
+
 
 # Evaluation
-# prophet_plot_components(model, prophet_forecast)
-# autoplot(prophet_forecast$yhat)
+prophet_plot_components(model, prophet_forecast)
+autoplot(prophet_forecast$yhat)
 ```
 
 
@@ -279,3 +281,18 @@ lines(x_axes, prophet_predict$yhat, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"), col=c("red", "blue"), lty=1,cex=0.8)
 plot(model, prophet_forecast)+ggtitle("Prophet Model")
 ```
+
+
+## Final Comparisons
+```{r}
+## Prophet
+accuracy(prophet_test$y, prophet_predict$yhat)
+## ARIMA
+accuracy(forecast(f7, h = val_size), msts_test)
+## ETS
+
+## Benchmark
+
+
+```
+

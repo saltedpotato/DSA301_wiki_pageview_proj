@@ -24,7 +24,7 @@ library(randomForest) # for RF modelling
 ### Reading CSV, Processing into TS Object, Visualisation of Data
 ```{r}
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
-daily_data = daily_data %>% mutate(day_week = as.factor(wday(ymd(daily_data$date), label = T)))
+daily_data = daily_data %>% mutate(day_week = as.factor(wday(ymd(daily_data$date), label = T)), month_of_year = as.factor(month(ymd(daily_data$date), label = T)))
 # train = get_train_df(daily_data)
 # Putting data into TS Object
 msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
@@ -51,7 +51,11 @@ autoplot(msts_train)
 ###Visualising STL decomposition
 ```{r}
 autoplot(daily_train_decomp)
-ggplot(daily_data[train_size:length(daily_data),], aes(x = day_week, y = views))+geom_boxplot()
+
+ggplot(daily_data[1:train_size,], aes(x = day_week, y = views))+geom_boxplot()
+
+ggplot(daily_data[1:train_size,], aes(x = month_of_year, y = views))+geom_boxplot()
+
 ggseasonplot(msts_train)
 # Both the yearly seasonal pattern and the weekly seasonal pattern seem significant (in terms of impact on overall data), and therefore we do not rule any of them out at the moment.
 ```

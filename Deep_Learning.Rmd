@@ -20,7 +20,7 @@ library(randomForest) # for RF modelling
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
-msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), ts.frequency = 7)
+msts_wiki_daily = daily_data$views %>% ts(start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), frequency = 7)
 # Creating Train and Test Set
 train_size = length(daily_data$date[year(daily_data$date) < 2021])
 val_size = dim(daily_data)[1] - train_size
@@ -319,7 +319,7 @@ legend("topleft", legend=c("y-original", "y-predicted"),
 forecast_seas$model %>% save_model_hdf5("rnn_seasonal.h5")
 ```
 
-```{r Arima on seasadj, LSTM on seasonal 7 and seasonal 365}
+```{r Arima on seasadj, LSTM on seasonal}
 forecasthorizon = val_size
 y_test <- daily_data$views[(length(daily_data$views) - forecasthorizon + 1):length(daily_data$views)]
 ##Arima on trend, LSTM on seasonal'
@@ -427,3 +427,132 @@ lines(x_axes, y_pred, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"),
        col=c("red", "blue"), lty=1,cex=0.8)
 ```
+
+```{r}
+lstmforecast_test = function(train, test, forecasthorizon, epochs){
+  normalization = c(mean(train), sd(train))
+  yvariable = c(train, test)
+  train_norm = (yvariable - normalization[1]) / normalization[2]
+  train_norm = as.matrix(train_norm)
+  
+  x_train_data = t(sapply(1:(length(train_norm) - forecasthorizon - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1), 1] ))
+  x_train_arr = array(data = as.numeric(unlist(x_train_data)), dim = c( nrow(x_train_data), forecasthorizon,   1   )  )
+  y_train_data = t(sapply( (1 + forecasthorizon):(length(train_norm) - forecasthorizon + 1), function(x) train_norm[x:(x + forecasthorizon - 1)] ))
+  y_train_arr = array( data = as.numeric(unlist(y_train_data)),  dim = c(  nrow(y_train_data),  forecasthorizon,   1    ) )
+  x_test = yvariable[(nrow(train_norm) - 2*forecasthorizon + 1):(nrow(train_norm) - forecasthorizon + 1)]
+  x_test_scaled = (x_test - normalization[1]) / normalization[2]
+  x_pred_arr = array(data = x_test_scaled,  dim = c( 1, forecasthorizon,  1 ) )
+ 
+  #####LSTM SETTINGS COPY PASTED FROM DOCS WITHOUT MODIFICATION###########
+  lstm_model = keras_model_sequential()
+  lstm_model %>%
+    layer_lstm(units = 64, # size of the layer
+               batch_input_shape = c(1, forecasthorizon, 1), # batch size, timesteps, features
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    # layer_dense(units=20, activation = "relu") %>%
+    # fraction of the units to drop for the linear transformation of the inputs
+    layer_dropout(rate = 0.5) %>%
+    layer_lstm(units = 32,
+               return_sequences = TRUE,
+               stateful = TRUE) %>%
+    layer_dropout(rate = 0.5) %>%
+    time_distributed(keras::layer_dense(units = 1))
+  
+  lstm_model %>%compile(loss = 'mae', optimizer = 'adam', metrics = 'mean_squared_error')     
+  lstm_model %>% fit(x = x_train_arr, y = y_train_arr, batch_size = 1, epochs = epochs,shuffle = FALSE, verbose = 2)    
+  lstm_forecast = lstm_model %>% predict(x_pred_arr, batch_size = 1) %>%.[, , 1]  #LINE X
+  lstm_forecast = lstm_forecast * normalization[2] + normalization[1]
+  
+  return(list(model = lstm_model, values = lstm_forecast))  
+}
+```
+
+```{r test_set}
+msts_wiki_daily = daily_data$views %>% ts(start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), frequency = 7)
+
+test_set <- read_csv('testdf.csv', show_col_types = FALSE)
+y_test <- test_set$views
+
+##LSTM Only
+var = msts_wiki_daily
+forecasthorizon = length(y_test)
+
+forecast = lstmforecast_test(var, y_test, forecasthorizon, 10)
+y_pred_lstm <- forecast$values
+
+sqrt(mean((y_pred_lstm - y_test)^2))
+
+x_axes = seq(1:length(y_pred_lstm))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred_lstm, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+        col=c("red", "blue"), lty=1,cex=0.8)
+forecast$model %>% save_model_hdf5("lstm_test.h5")
+
+
+# ARIMA + LSTM
+##Arima on trend, LSTM on seasonal'
+data_decomp <- mstl(msts_wiki_daily)
+train_seasadj <- seasadj(data_decomp)
+msts_test <- ts(y_test, start =c(2021 , as.numeric(format(test_set$date[1], "%j"))), frequency = 7)
+msts_test_decomp <- mstl(msts_test)
+
+arima_seasadj <- Arima(train_seasadj, order=c(3,1,3), seasonal = list(order = c(2,0,3), period = 7))
+
+y_pred_seasadj <- forecast(arima_seasadj, h = forecasthorizon)
+y_pred_seasadj <- y_pred_seasadj$mean 
+
+
+var_seas = seasonal(data_decomp)
+test_seas = seasonal(msts_test_decomp)
+
+forecast_seas = lstmforecast_test(var_seas, test_seas, forecasthorizon, 10)
+y_pred_seas <- forecast_seas$values 
+forecast_seas$model %>% save_model_hdf5("lstm_seasonal_test.h5")
+
+y_pred <- y_pred_seasadj + y_pred_seas
+sqrt(mean((y_pred - y_test)^2))
+
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+       col=c("red", "blue"), lty=1,cex=0.8)
+
+
+# LSTM on seasadj, Prophet on seasonal
+data_decomp <- mstl(msts_wiki_daily)
+msts_test <- ts(y_test, start =c(2021 , as.numeric(format(test_set$date[1], "%j"))), frequency = 7)
+msts_test_decomp <- mstl(msts_test)
+
+train_seasadj <- seasadj(data_decomp)
+test_seasadj = seasadj(msts_test_decomp)
+
+forecast_seasadj = lstmforecast_test(train_seasadj, test_seasadj, forecasthorizon, 10)
+y_pred_seasadj <- forecast_seasadj$values 
+forecast_seasadj$model %>% save_model_hdf5("lstm_seasadj_test.h5")
+
+prophet_train = rename(daily_data, y = views, ds = date)
+prophet_train$y = var_seas
+
+model = prophet(data.frame(prophet_train), daily.seasonality = FALSE)
+
+# Prediction
+future = make_future_dataframe(model, periods = forecasthorizon)
+prophet_forecast = predict(model, future)
+prophet_predict = predict(model, future) %>% slice_tail(., n = forecasthorizon)
+
+y_pred <- y_pred_seasadj + prophet_predict$yhat
+sqrt(mean((y_pred - y_test)^2))
+
+
+x_axes = seq(1:length(y_pred))
+plot(x_axes, y_test, type="l", col="red", lwd=2)
+lines(x_axes, y_pred, col="blue",lwd=2)
+legend("topleft", legend=c("y-original", "y-predicted"),
+       col=c("red", "blue"), lty=1,cex=0.8)
+
+```
+

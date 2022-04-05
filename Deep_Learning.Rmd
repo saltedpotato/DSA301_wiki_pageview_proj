@@ -1,5 +1,6 @@
 # Libraries
 ```{r include=FALSE}
+rm(list = ls())
 library(jsonlite)
 library(lubridate)
 library(forecast)
@@ -44,35 +45,62 @@ seas365 = seasonal(daily_train_decomp)[,2] %>% ts(., frequency = 365) %>%  snaiv
 ### Exogenous Variables
 #### 2020 Dummy
 daily_data$y2020 = sapply(daily_data$date, function(x) {
-  if (year(x) ==2020) {return(1)}
+  if (year(x) ==2020 && month(x) >= 3 && month(x) <=12) {return(1)}
   return(0)
 })
-
-train2020_dummy = daily_data$y2020[1:train_size]
+train2020_dummy = daily_data$y2020[2:train_size]
 test2020_dummy = daily_data$y2020[(train_size+1): dim(daily_data)[1]]
 
 #### Differenced Seasonally Adjusted Information
-seasadj_wiki_differenced = seasadj_wiki %>% diff()
+seasadj_wiki_diff = seasadj_wiki %>% diff()
+seasadj_wiki_diff_7 = seasadj_wiki %>% diff(.,7)
 ```
 
+### Basic Neural Networks
+```{r}
+test_model = nnetar(msts_train)
+test_model = nnetar(msts_train, p = 35, P = 5)
+test_model_forecast = forecast(test_model, h = val_size)$mean
+accuracy(test_model_forecast, msts_test)
+# RMSE of 12.640662, 17.262
 
-### FF NN TEST
+seasadj_forecast =nnetar(seasadj_wiki, p = 35, P = 5) %>% forecast(., h = val_size)
+final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
+checkresiduals(seasadj_forecast)
+accuracy(final_forecast, msts_test)
+# RMSE with STL decomposition: 11.561
+```
+
+### FF NN with Varying input size
 ```{r}
 getNN_accuracy = function(data, p = 35, P= 5, xregterm = NULL, xregterm_forecasted= NULL){
-    seasadj_forecast = nnetar(data, p =  p, P = P, xreg= xregterm) %>% forecast(., h= val_size, xreg = xregterm_forecasted)
+    model = nnetar(data, p =  p, P = P, xreg= xregterm)
+    seasadj_forecast = forecast(model, h= val_size, xreg = xregterm_forecasted)
     final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
-    return (accuracy(final_forecast, msts_test))
+    # print(checkresiduals(final_forecast))
+    return(accuracy(final_forecast, msts_test))
 }
 
 ## Feedfoward NN, optimising for the number of seasonal lags and non-seasonal lags to be used within the model
-m1 = getNN_accuracy(data = seasadj_wiki)
-### RMSE xreg, p = 35, P = 5 is 10.82363, 10.727, 10.403
-### Scale inputs doens't do anything - actually makes it worse
+### RMSE xreg, p = 35, P = 5 is 10.82363, 10.727, 10.403, 10.760 under default model parameters.
+results = c()
+for (week in 1:6){
+  model_rmse = getNN_accuracy(data = seasadj_wiki, p = week*7)[,2]
+  results = append(results, model_rmse)
+}
 
+results
+plot(results, type = "l", xlab = "Weeks of non-seasonal lags used for input", ylab = "Validation RMSE", col = "blue", title = "")
+# The model has the lowest validation RMSE when 5 weeks worth of non seasonal lag data is used as input
+```
+
+
+### FF NN with stationary transformation
+```{r}
 # Feeding differenced data into neural network instead
-adjustedNN_new = nnetar(seasadj_wiki_new, p = 35, P = 5)
-adjustedNN_new_pred = forecast(adjustedNN_new, h = val_size)$mean
-transformed = as.vector(adjustedNN_new_pred)
+NN_diff_1 = nnetar(seasadj_wiki_diff, p = 35, P = 5)
+NN_diff_1_pred = forecast(NN_diff_1, h = val_size)$mean
+transformed = as.vector(NN_diff_1_pred)
 transformed[1] = transformed[1] + as.vector(seasadj_wiki)[train_size]
 transformed = cumsum(transformed)
 final_pred_new = transformed + as.vector(seas7$mean) + as.vector(seas365$mean) 
@@ -80,21 +108,43 @@ accuracy(final_pred_new, msts_test)
 # RMSE is 18.16
 # RMSE is 11.83654
 # The next time it became 13.95
+# Shit is highly variable
 # It is being evaluated on the same dataset, so it means that the parameters that are being estimated are constantly changing, based perhaps on the weight initialisation, the approach to gradient descent that is being used.... Highly variable result... 
+
+
+# Using Neural Network to forecast difference data (lag = 7)
+NN_diff_7 = nnetar(seasadj_wiki_diff_7)
+NN_diff_7_pred = forecast(NN_diff_7, h = val_size)$mean
 ```
+### FF NN with xreg terms
+```{r}
+# DOESN't MAKE SENSE
+# exogenous_var = cbind(seasadj_wiki_diff_7, seasadj_wiki_diff, train2020_dummy) %>% as.matrix()
+# exogenous_var = exogenous_var[7:(train_size -1),]
+# exogenous_var_val = cbind(NN_diff_7_pred, NN_diff_1_pred, test2020_dummy)
+  
+diff1_forecast = forecast(seasadj_wiki_diff, h = val_size)$mean
+diff7_forecast = forecast(seasadj_wiki_diff_7, h = val_size)$mean
+exogenous_var_val_alt = cbind(diff7_forecast, diff1_forecast, test2020_dummy)
+```
+
 ### FF NN with exogenous variables
 ```{r}
 # creating exogenous variables
-# 1st variable: Differenced information forecasted using a feedforward neural network. 2nd Variable: 2020 Dummy
-exogenous_var = matrix(c(seasadj_wiki_differenced, train2020_dummy), ncol = 2)
-exogenous_var_val = matrix(c(adjustedNN_new_pred,test2020_dummy), ncol=2)
+# 1st variable: Differenced information forecasted using a feedforward neural network. 2nd Variable: 2020 
+exogenous_var = cbind(seasadj_wiki_diff, train2020_dummy)
+# exogenous_var_val = cbind(NN_diff_pred,test2020_dummy)
+exogenous_var_val = cbind(diff1_forecast,test2020_dummy)
+# exogenous_var = cbind(seasadj_wiki_diff_7, tail(train2020_dummy, length(seasadj_wiki_diff_7)))
+# exogenous_var_val = cbind(diff7_forecast,test2020_dummy)
 
 # Building the model
-getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val)
-# RMSE 15.29
-getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var[,1], xregterm_forecasted = exogenous_var_val[,1])
+# getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val_alt)
+getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val)
+# RMSE 15.29, and 11.227
+getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var[,1], xregterm_forecasted = exogenous_var_val[,1])
 # RMSE is 16.3668
-getNN_accuracy(data = seasadj_wiki, xregterm = exogenous_var[,2], xregterm_forecasted = exogenous_var_val[,2])
+getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,2])), xregterm = exogenous_var[,2], xregterm_forecasted = exogenous_var_val[,2])
 ### RMSE is 10.86401
 ### RMSE is 14.57215
 ### RMSE is 13.98177

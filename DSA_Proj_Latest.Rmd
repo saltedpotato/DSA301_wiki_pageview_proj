@@ -21,6 +21,14 @@ library(randomForest) # for RF modelling
 #source("dataprocessing.R")
 ```
 
+
+```{r}
+test = filter(daily_data, year(date) == 2020)
+test$views %>% plot()
+```
+
+
+
 ### Reading CSV, Processing into TS Object, Visualisation of Data
 ```{r}
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
@@ -41,10 +49,6 @@ msts_test = msts_split$test
 ### STL Decomposition
 daily_train_decomp = mstl(msts_train)
 seasadj_wiki <- seasadj(daily_train_decomp)
-
-# model_names = c()
-# final_rmse = c()
-
 autoplot(msts_train)
 ```
 
@@ -188,7 +192,7 @@ f6 = build_arima(msts_train, c(3,1,3), c(2,1,1))
 f7 = build_arima(msts_train, c(3,1,3), c(2,1,3))
 
 # get_important_stats(f7)
-
+checkresiduals(f7)
 
 checkresiduals(forecast(f0, h = val_size))$p.value
 checkresiduals(forecast(f2, h= val_size))
@@ -207,7 +211,7 @@ accuracy(forecast(f7, h = val_size), msts_test)
 ## ARIMA-X with 2020 Outlier
 ```{r}
 daily_data$y2020 = sapply(daily_data$date, function(x) {
-  if (year(x) ==2020) {return(1)}
+  if (year(x) ==2020 && month(x) >= 3 && month(x) <= 7) {return(1)}
   return(0)
 })
 
@@ -221,7 +225,7 @@ arimax_model= Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,
 seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
 seas365 = seasonal(daily_train_decomp)[,2] %>% snaive(.,h = val_size) %>% forecast()
 accuracy(as.vector(seas7$mean) + seas365$mean + arimax_model$mean, msts_test)
-# RMSE of 10.57301, which is worse thatn the original model without the adjustment for 2020
+# RMSE of 10.57301, which is worse than the original model without the adjustment for 2020
 ```
 
 ## Facebook Prophet
@@ -243,7 +247,16 @@ accuracy(prophet_test$y, prophet_predict$yhat)
 
 # Evaluation
 prophet_plot_components(model, prophet_forecast)
-autoplot(prophet_forecast$yhat)
+prophet_weekly = prophet_forecast$weekly %>% tail(., val_size)
+prophet_yearly = prophet_forecast$yearly %>% tail(., val_size)
+new_model = Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7)) %>% forecast (.,, h = val_size)
+seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
+seas365 = seasonal(daily_train_decomp)[,2] %>% snaive(.,h = val_size) %>% forecast()
+accuracy(prophet_weekly + prophet_yearly + new_model$mean, msts_test)
+accuracy(as.vector(seas7$mean) + seas365$mean + new_model$mean, msts_test)
+
+
+# autoplot(prophet_forecast$yhat)
 ```
 
 
@@ -280,6 +293,9 @@ plot(x_axes, prophet_test$y, type="l", col="red", lwd=2)
 lines(x_axes, prophet_predict$yhat, col="blue",lwd=2)
 legend("topleft", legend=c("y-original", "y-predicted"), col=c("red", "blue"), lty=1,cex=0.8)
 plot(model, prophet_forecast)+ggtitle("Prophet Model")
+
+# Prophet vs STL Decomp
+
 ```
 
 
@@ -292,7 +308,7 @@ accuracy(forecast(f7, h = val_size), msts_test)
 ## ETS
 
 ## Benchmark
-
+mstl(msts_test)
 
 ```
 

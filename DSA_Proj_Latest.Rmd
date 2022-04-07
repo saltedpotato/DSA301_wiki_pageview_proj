@@ -24,7 +24,9 @@ library(randomForest) # for RF modelling
 
 ```{r}
 test = filter(daily_data, year(date) == 2020)
-test$views %>% plot()
+ts2020 = test$views %>% msts(., seasonal.periods = c(7,365), start = c(2020,1,1))
+autoplot(ts2020)
+
 ```
 
 
@@ -47,7 +49,8 @@ msts_test = msts_split$test
 
 
 ### STL Decomposition
-daily_train_decomp = mstl(msts_train)
+daily_train_decomp = mstl(msts_train, robust = TRUE)
+autoplot(daily_train_decomp)
 seasadj_wiki <- seasadj(daily_train_decomp)
 autoplot(msts_train)
 ```
@@ -163,6 +166,11 @@ A4 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,0,2), peri
 
 A6 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7))
 A7 <- Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,3), period = 7))
+checkresiduals(A2)
+checkresiduals(A0)
+checkresiduals(A4)
+checkresiduals(A6)
+Box.test(A7)
 
 # Trying to work off a more specific implementation of auto.arima where the differences already specified.
 finalA = auto.arima(ts(seasadj_wiki, frequency = 7), d =1, D = 1)
@@ -199,7 +207,7 @@ f7 = build_arima(msts_train, c(3,1,3), c(2,1,3))
 checkresiduals(f7)
 
 checkresiduals(forecast(f0, h = val_size))$p.value
-checkresiduals(forecast(f2, h= val_size))
+checkresiduals(forecast(f2, h= val_size)) 
 checkresiduals(forecast(f4, h = val_size)) #PASS
 checkresiduals(forecast(f6, h = val_size)) # PASS
 checkresiduals(forecast(f7, h = val_size)) # PASS
@@ -223,12 +231,19 @@ train2020_dummy = daily_data$y2020[1:train_size]
 test2020_dummy = daily_data$y2020[(train_size+1): dim(daily_data)[1]]
 
 ## Alternative Approach manually forecasting everything.
-arimax_model= Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,1), period = 7), xreg = train2020_dummy) %>% forecast (., xreg = test2020_dummy, h = val_size)
+arimax_model= Arima(seasadj_wiki, order=c(3,1,3), seasonal = list(order = c(2,1,3), period = 7), xreg = train2020_dummy) %>% forecast (., xreg = test2020_dummy, h = val_size)
 
+arimax_model$model
 
 seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
 seas365 = seasonal(daily_train_decomp)[,2] %>% snaive(.,h = val_size) %>% forecast()
+
+
 accuracy(as.vector(seas7$mean) + seas365$mean + arimax_model$mean, msts_test)
+
+final_final = as.vector(seas7$mean) + seas365$mean + arimax_model$mean %>% msts(., seasonal.periods = c(365,7), start = c(2021,1,1))
+autoplot(dailyviews, series = "Actual") + autolayer(final_final, series = "Arima-X Prediction")
+
 # RMSE of 10.57301, which is worse than the original model without the adjustment for 2020
 ```
 
@@ -283,22 +298,27 @@ plot_info = function(model,name){
     ggtitle(name) 
 }
 
+val_fct = function(model,name){
+  autoplot(msts_test, series = "Original")+
+    autolayer(forecast(model, h = val_size), PI = F, alpha = 0.9, 
+              col = "red", 
+              series = "Forecast")+
+    scale_colour_manual(values=c("Original"="black","Forecast"="red"),
+                        breaks=c("Original","Forecast"))+
+    ggtitle(name) 
+}
+
+prophet_ts = prophet_predict$yhat %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
+
+dailyviews =msts(msts_test,seasonal.periods = c(7,365), start = c(2021,1,1))
+autoplot(dailyviews, series = "Actual") + autolayer(prophet_ts, series = "Prophet Prediction")
+
 # Benchmark Models
-plot_info(b1, "Naive Model")
-plot_info(b2, "Drift Model")
-plot_info(b3, "ETS Model")
+val_fct(b1, "Naive Model")
+val_fct(b2, "Drift Model")
+val_fct(b3, "ETS Model")
 # Best ARIMA Models
 plot_info(f7, "ARIMA (3,1,3)(2,1,3)[7] Model")
-
-# Prophet
-
-x_axes = seq(1:(length(prophet_predict$yhat)))
-plot(x_axes, prophet_test$y, type="l", col="red", lwd=2)
-lines(x_axes, prophet_predict$yhat, col="blue",lwd=2)
-legend("topleft", legend=c("y-original", "y-predicted"), col=c("red", "blue"), lty=1,cex=0.8)
-plot(model, prophet_forecast)+ggtitle("Prophet Model")
-
-# Prophet vs STL Decomp
 
 ```
 
@@ -313,6 +333,11 @@ accuracy(forecast(f7, h = val_size), msts_test)
 
 ## Benchmark
 mstl(msts_test)
+
+```
+
+
+```{r}
 
 ```
 

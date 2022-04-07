@@ -12,7 +12,6 @@ library(keras) # for deep learning
 library(tidyverse) # general utility functions
 library(caret) # machine learning utility functions
 library(randomForest) # for RF modelling
-#source('dataprocessing.R')
 ```
 
 
@@ -21,14 +20,20 @@ library(randomForest) # for RF modelling
 daily_data = read_csv('trainvaldf.csv', show_col_types = FALSE)
 
 # Putting data into TS Object
-msts_wiki_daily = daily_data$views %>% ts(start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), frequency = 7)
+# msts_wiki_daily = daily_data$views %>% ts(start =c(2015, as.numeric(format(daily_data$date[1], "%j"))), frequency = 7)
+msts_wiki_daily = daily_data$views %>% msts(seasonal.periods = c(7, 365), start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
+
 # Creating Train and Test Set
 train_size = length(daily_data$date[year(daily_data$date) < 2021])
 val_size = dim(daily_data)[1] - train_size
 
+# Creating MSTS split
 msts_split <- ts_split(msts_wiki_daily, sample.out = val_size)
 msts_train = msts_split$train
 msts_test = msts_split$test
+
+msts_test %>% head()
+daily_data %>% filter(., year(date) == 2021) %>% head()
 ```
 
 
@@ -36,11 +41,14 @@ msts_test = msts_split$test
 ```{r}
 ### STL Decomposition
 daily_train_decomp = mstl(msts_train)
-seasadj_wiki = seasadj(daily_train_decomp) %>% ts(., frequency = 7)
+# daily_train_decomp = mstl(msts_train, robust = TRUE)
+
+# seasadj_wiki = seasadj(daily_train_decomp) %>% ts(., frequency = 7, start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
+seasadj_wiki = seasadj(daily_train_decomp) %>% ts(., frequency = 365, start =c(2015, as.numeric(format(daily_data$date[1], "%j"))))
 
 ### Forecasted seasonal values using snaive
-seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7) %>% snaive(., h= val_size) %>%  forecast()
-seas365 = seasonal(daily_train_decomp)[,2] %>% ts(., frequency = 365) %>%  snaive(.,h = val_size) %>% forecast()
+seas7 = seasonal(daily_train_decomp)[,1] %>% ts(., frequency = 7, start =c(2015, as.numeric(format(daily_data$date[1], "%j")))) %>% snaive(., h= val_size) %>%  forecast()
+seas365 = seasonal(daily_train_decomp)[,2] %>% ts(., frequency = 365, start =c(2015, as.numeric(format(daily_data$date[1], "%j")))) %>%  snaive(.,h = val_size) %>% forecast()
 
 ### Exogenous Variables
 #### 2020 Dummy
@@ -58,13 +66,13 @@ seasadj_wiki_diff_7 = seasadj_wiki %>% diff(.,7)
 
 ### Basic Neural Networks
 ```{r}
+set.seed(5)
 test_model = nnetar(msts_train)
-test_model = nnetar(msts_train, p = 35, P = 5)
 test_model_forecast = forecast(test_model, h = val_size)$mean
 accuracy(test_model_forecast, msts_test)
 # RMSE of 12.640662, 17.262
 
-seasadj_forecast =nnetar(seasadj_wiki, p = 35, P = 5) %>% forecast(., h = val_size)
+seasadj_forecast =nnetar(seasadj_wiki) %>% forecast(., h = val_size)
 final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
 checkresiduals(seasadj_forecast)
 accuracy(final_forecast, msts_test)
@@ -73,38 +81,66 @@ accuracy(final_forecast, msts_test)
 
 ### FF NN with Varying input size
 ```{r}
-getNN_accuracy = function(data, p = 35, P= 5, xregterm = NULL, xregterm_forecasted= NULL){
+getNN_accuracy = function(data, p = 35, P= 0, xregterm = NULL, xregterm_forecasted= NULL){
     model = nnetar(data, p =  p, P = P, xreg= xregterm)
     seasadj_forecast = forecast(model, h= val_size, xreg = xregterm_forecasted)
     final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
-    # print(checkresiduals(final_forecast))
     return(accuracy(final_forecast, msts_test))
 }
 
-## Feedfoward NN, optimising for the number of seasonal lags and non-seasonal lags to be used within the model
+getNN_forecast = function(data, p = 35, P= 0, xregterm = NULL, xregterm_forecasted= NULL){
+    model = nnetar(data, p =  p, P = P, xreg= xregterm)
+    seasadj_forecast = forecast(model, h= val_size, xreg = xregterm_forecasted)
+    final_forecast = as.vector(seasadj_forecast$mean) + as.vector(seas7$mean) + as.vector(seas365$mean)
+    
+    # final_forecast = ts(final_forecast, frequency=7, start =c(2015, as.numeric(format(daily_data$date[train_size+1], "%j"))))
+    return(final_forecast)
+}
+
+## Feedfoward NN, optimising for the number of  non-seasonal lags to be used within the model
 ### RMSE xreg, p = 35, P = 5 is 10.82363, 10.727, 10.403, 10.760 under default model parameters.
+
 results = c()
 for (week in 1:6){
-  model_rmse = getNN_accuracy(data = seasadj_wiki, p = week*7)[,2]
+  set.seed(5)
+  model_rmse = getNN_accuracy(data = seasadj_wiki, p = week*7, P = 0)[,2]
   results = append(results, model_rmse)
 }
 
 results
-plot(results, type = "l", xlab = "Weeks of non-seasonal lags used for input", ylab = "Validation RMSE", col = "blue", title = "")
+plot(results, type = "l", xlab = "Weeks of non-seasonal lags used for input", ylab = "Validation RMSE", col = "blue")
 # The model has the lowest validation RMSE when 5 weeks worth of non seasonal lag data is used as input
+
+## Optimising for number of seasonal lags
+set.seed(5)
+results = c()
+for (week in 0:2){
+  print(week)
+  model_rmse = getNN_accuracy(data = seasadj_wiki, P = week)[,2]
+  results = append(results, model_rmse)
+}
+
+results
+plot(results, x = 0:2, type = "l", xlab = "Number of seasonal lags used for input", ylab = "Validation RMSE", col = "blue")
+
 ```
 
 
 ### FF NN with stationary transformation
 ```{r}
+set.seed(5)
 # Feeding differenced data into neural network instead
-NN_diff_1 = nnetar(seasadj_wiki_diff, p = 35, P = 5)
+NN_diff_1 = nnetar(seasadj_wiki_diff, p =35, P = 0)
 NN_diff_1_pred = forecast(NN_diff_1, h = val_size)$mean
 transformed = as.vector(NN_diff_1_pred)
 transformed[1] = transformed[1] + as.vector(seasadj_wiki)[train_size]
 transformed = cumsum(transformed)
 final_pred_new = transformed + as.vector(seas7$mean) + as.vector(seas365$mean) 
+final_pred_new_ts = final_pred_new %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
 accuracy(final_pred_new, msts_test)
+autoplot(msts_test, series = "y-original") + autolayer(final_pred_new_ts, alpha = 0.9,series = "y-pred")
+
+final_pred_new - finalNN_forecast
 # RMSE is 18.16
 # RMSE is 11.83654
 # The next time it became 13.95
@@ -113,90 +149,65 @@ accuracy(final_pred_new, msts_test)
 
 
 # Using Neural Network to forecast difference data (lag = 7)
-NN_diff_7 = nnetar(seasadj_wiki_diff_7)
-NN_diff_7_pred = forecast(NN_diff_7, h = val_size)$mean
-```
-### FF NN with xreg terms
-```{r}
-# DOESN't MAKE SENSE
-# exogenous_var = cbind(seasadj_wiki_diff_7, seasadj_wiki_diff, train2020_dummy) %>% as.matrix()
-# exogenous_var = exogenous_var[7:(train_size -1),]
-# exogenous_var_val = cbind(NN_diff_7_pred, NN_diff_1_pred, test2020_dummy)
-  
-diff1_forecast = forecast(seasadj_wiki_diff, h = val_size)$mean
-diff7_forecast = forecast(seasadj_wiki_diff_7, h = val_size)$mean
-exogenous_var_val_alt = cbind(diff7_forecast, diff1_forecast, test2020_dummy)
+# NN_diff_7 = nnetar(seasadj_wiki_diff_7)
+# NN_diff_7_pred = forecast(NN_diff_7, h = val_size)$mean
 ```
 
 ### FF NN with exogenous variables
 ```{r}
-# creating exogenous variables
-# 1st variable: Differenced information forecasted using a feedforward neural network. 2nd Variable: 2020 
-exogenous_var = cbind(seasadj_wiki_diff, train2020_dummy)
-# exogenous_var_val = cbind(NN_diff_pred,test2020_dummy)
-exogenous_var_val = cbind(diff1_forecast,test2020_dummy)
+# creating exogenous variables. 1st variable: Differenced information forecasted using a feedforward neural network. 2nd Variable: 2020
+
+### VERSION 1 INCLUDING 2 DIFFERENCED DATA SETS
+# exogenous_var = cbind(seasadj_wiki_diff_7, seasadj_wiki_diff, train2020_dummy) %>% as.matrix()
+# exogenous_var = exogenous_var[7:(train_size -1),]
+# exogenous_var_val = cbind(NN_diff_7_pred, NN_diff_1_pred, test2020_dummy)
+# exogenous_var_val_alt = cbind(diff7_forecast, diff1_forecast, test2020_dummy)
+
+### VERSION 3 INCLUDING 7 DIFF DATA, and 2020.
 # exogenous_var = cbind(seasadj_wiki_diff_7, tail(train2020_dummy, length(seasadj_wiki_diff_7)))
 # exogenous_var_val = cbind(diff7_forecast,test2020_dummy)
 
-# Building the model
-# getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val_alt)
+
+### VERSION 2 INCLUDING 1 DIFFERENCED DATASET, and not forecasting using the Neural Network.
+# diff7_forecast = forecast(seasadj_wiki_diff_7, h = val_size)$mean
+
+diff1_forecast = forecast(seasadj_wiki_diff, h = val_size)$mean
+exogenous_var = cbind(seasadj_wiki_diff, train2020_dummy)
+exogenous_var_val = cbind(diff1_forecast,test2020_dummy)
+
+set.seed(5)
+# Building the model - 3 different variations, selecting different xreg variables to use
 getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val)
-# RMSE 15.29, and 11.227
+
 getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,1])), xregterm = exogenous_var[,1], xregterm_forecasted = exogenous_var_val[,1])
-# RMSE is 16.3668
+
 getNN_accuracy(data = tail(seasadj_wiki, length(exogenous_var[,2])), xregterm = exogenous_var[,2], xregterm_forecasted = exogenous_var_val[,2])
-### RMSE is 10.86401
-### RMSE is 14.57215
-### RMSE is 13.98177
 ```
 
 
 
 ## FeedForward Neural Network
-### FeedForward NN Training
+### Final FeedFoward NN 
 ```{r}
+set.seed(5)
+finalNN_forecast = getNN_forecast(seasadj_wiki, p = 35, P = 0)
+finalNN_forecast_ts = finalNN_forecast %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
+msts_test = msts_test %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
 
-#NN without xreg on seasonal adjusted data
-NN_model1 = stlm(msts_train, modelfunction=forecast::nnetar)
-NN_forecast1 = forecast(NN_model1, h = val_size)
-autoplot(msts_wiki_daily)+autolayer(NN_forecast1)
+accuracy(finalNN_forecast, msts_test)
+autoplot(msts_test, series = "y-original") + autolayer(finalNN_forecast_ts, alpha = 0.9,series = "y-pred")
 
-#NN with xreg non-seasonal lag
-wiki_1 = diff(msts_train)
-wiki1nn = nnetar(wiki_1)
-forecastedgrowth1 = forecast(wiki1nn, val_size)
-NN_model2 = nnetar(tail(msts_train, length(wiki_1)), 
-                   xreg = wiki_1 )
-NN_forecast2 = forecast(NN_model2, h = val_size, xreg = tail(forecastedgrowth1$x,val_size))
+finalNN_forecast_2 = getNN_forecast(data = tail(seasadj_wiki, length(exogenous_var[,1])), p = 35, P = 0, xregterm = exogenous_var, xregterm_forecasted = exogenous_var_val)
+finalNN_forecast_ts_2 = finalNN_forecast_2 %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
+# msts_test = msts_test %>% msts(., seasonal.periods = c(7,365), start = c(2021,1,1))
 
-#NN with xreg seasonal lag
-wiki_7 = diff(msts_train,7)
-wiki7nn = nnetar(wiki_7)
-forecastedgrowth7 = forecast(wiki7nn, val_size)
-NN_model3 = nnetar(tail(msts_train, length(wiki_7)), xreg = wiki_7)
-NN_forecast3 = forecast(NN_model3, h = val_size, xreg = tail(forecastedgrowth7$x,val_size))
-
-#NN with xreg non-seasonal and seasonal lag
-NN_model4 = nnetar(tail(msts_train, length(wiki_7)), xreg = cbind(tail(wiki_1, length(wiki_7)), wiki_7))
-NN_forecast4 = forecast(NN_model4, h = val_size, xreg = cbind(tail(forecastedgrowth1$x, val_size), tail(forecastedgrowth7$x, val_size)))
-```
-
-### FeedForward NN Testing
-```{r}
-accuracy(NN_forecast1, msts_test)
-accuracy(NN_forecast2, msts_test)
-accuracy(NN_forecast3, msts_test)
-accuracy(NN_forecast4, msts_test)
-
-autoplot(msts_test)+autolayer(NN_forecast1, col = 'blue')
-autoplot(msts_test)+autolayer(NN_forecast2, col = 'red')
-autoplot(msts_test)+autolayer(NN_forecast3, col = 'green')
-autoplot(msts_test)+autolayer(NN_forecast4, col = 'purple')
-# autoplot(msts_wiki_daily)+autolayer(NN_forecast1, alpha = 0.7, col = 'red')
-
+accuracy(finalNN_forecast_2, msts_test)
+autoplot(msts_test, series = "y-original") + autolayer(finalNN_forecast_ts_2, alpha = 0.9,series = "y-pred-2")
 ```
 
 
+
+## RNN MODELS
 ```{r LSTM, RNN model Functions}
 lstmforecast = function(yvariable, forecasthorizon, epochs){
   normalization = c(mean(yvariable), sd(yvariable))
